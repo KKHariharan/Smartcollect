@@ -1,0 +1,87 @@
+<div class="sc-page-header">
+  <h1>{{ customerId() ? 'Edit Customer' : 'Add Customer' }}</h1>
+  <a mat-stroked-button routerLink="/customers">Back to list</a>
+</div>
+
+<mat-card>
+  <mat-card-content>
+    <form [formGroup]="form" (ngSubmit)="submit()" class="sc-form" style="max-width: 640px">
+      <div class="sc-form__row">
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Full name</mat-label>
+          <input matInput formControlName="name" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Mobile</mat-label>
+          <input matInput formControlName="mobile" />
+          @if (form.controls.mobile.hasError('pattern')) {
+            <mat-error>Mobile number must be exactly 10 digits</mat-error>
+          }
+        </mat-form-field>
+      </div>
+
+      <div class="sc-form__row">
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Email</mat-label>
+          <input matInput type="email" formControlName="email" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Occupation</mat-label>
+          <input matInput formControlName="occupation" />
+        </mat-form-field>
+      </div>
+
+      <div class="sc-form__row">
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Monthly income</mat-label>
+          <input matInput type="number" formControlName="monthlyIncome" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Assigned agent</mat-label>
+          <mat-select formControlName="assignedAgent">
+            <mat-option value="">Unassigned</mat-option>
+            @for (agent of agents(); track agent._id) {
+              <mat-option [value]="agent._id">{{ agent.name }} ({{ agent.agentCode }})</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      <div formGroupName="address">
+        <div class="sc-form__row">
+          <mat-form-field appearance="outline" class="sc-form__field">
+            <mat-label>Address line</mat-label>
+            <input matInput formControlName="line1" />
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="sc-form__field">
+            <mat-label>City</mat-label>
+            <input matInput formControlName="city" />
+          </mat-form-field>
+        </div>
+        <div class="sc-form__row">
+          <mat-form-field appearance="outline" class="sc-form__field">
+            <mat-label>State</mat-label>
+            <input matInput formControlName="state" />
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="sc-form__field">
+            <mat-label>Pincode</mat-label>
+            <input matInput formControlName="pincode" />
+          </mat-form-field>
+        </div>
+      </div>
+
+      <button
+        mat-flat-button
+        color="primary"
+        type="submit"
+        [disabled]="saving()"
+        class="sc-form__submit"
+      >
+        {{ customerId() ? 'Save changes' : 'Create customer' }}
+      </button>
+    </form>
+  </mat-card-content>
+</mat-card>

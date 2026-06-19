@@ -1,0 +1,73 @@
+<div class="sc-page-header">
+  <h1>Settings</h1>
+</div>
+
+@if (loading()) {
+  <div class="sc-loading"><mat-spinner diameter="32"></mat-spinner></div>
+} @else {
+  <form [formGroup]="form" (ngSubmit)="submit()" class="sc-form" style="max-width: 640px">
+    <mat-card style="margin-bottom: 1rem">
+      <mat-card-header><mat-card-title>Company Settings</mat-card-title></mat-card-header>
+      <mat-card-content formGroupName="company" class="sc-form">
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Company name</mat-label>
+          <input matInput formControlName="name" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Address</mat-label>
+          <input matInput formControlName="address" />
+        </mat-form-field>
+        <div class="sc-form__row">
+          <mat-form-field appearance="outline" class="sc-form__field">
+            <mat-label>Phone</mat-label>
+            <input matInput formControlName="phone" />
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="sc-form__field">
+            <mat-label>Email</mat-label>
+            <input matInput formControlName="email" />
+          </mat-form-field>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card style="margin-bottom: 1rem">
+      <mat-card-header><mat-card-title>Interest Settings</mat-card-title></mat-card-header>
+      <mat-card-content formGroupName="interest" class="sc-form__row">
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Default interest rate (%)</mat-label>
+          <input matInput type="number" formControlName="defaultInterestRate" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Default penalty / day</mat-label>
+          <input matInput type="number" formControlName="defaultPenaltyChargePerDay" />
+        </mat-form-field>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card style="margin-bottom: 1rem">
+      <mat-card-header><mat-card-title>Receipt Settings</mat-card-title></mat-card-header>
+      <mat-card-content formGroupName="receipt" class="sc-form__row">
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Receipt prefix</mat-label>
+          <input matInput formControlName="prefix" />
+        </mat-form-field>
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Footer note</mat-label>
+          <input matInput formControlName="footerNote" />
+        </mat-form-field>
+      </mat-card-content>
+    </mat-card>
+
+    @if (canUpdate) {
+      <button
+        mat-flat-button
+        color="primary"
+        type="submit"
+        [disabled]="saving()"
+        class="sc-form__submit"
+      >
+        Save settings
+      </button>
+    }
+  </form>
+}

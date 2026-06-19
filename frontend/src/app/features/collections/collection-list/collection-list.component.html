@@ -1,0 +1,60 @@
+<div class="sc-page-header">
+  <h1>Collections</h1>
+  <div class="sc-toolbar-actions">
+    <a mat-stroked-button routerLink="/collections/pending">
+      <mat-icon>pending_actions</mat-icon> Pending
+    </a>
+    @if (canCreate) {
+      <a mat-flat-button color="primary" routerLink="/collections/new">
+        <mat-icon>add</mat-icon> Record Payment
+      </a>
+    }
+  </div>
+</div>
+
+@if (loading()) {
+  <div class="sc-loading"><mat-spinner diameter="32"></mat-spinner></div>
+} @else {
+  <table mat-table [dataSource]="collections()" class="sc-table">
+    <ng-container matColumnDef="receiptNumber">
+      <th mat-header-cell *matHeaderCellDef>Receipt #</th>
+      <td mat-cell *matCellDef="let row">{{ row.receiptNumber }}</td>
+    </ng-container>
+    <ng-container matColumnDef="customer">
+      <th mat-header-cell *matHeaderCellDef>Customer</th>
+      <td mat-cell *matCellDef="let row">{{ customerLabel(row) }}</td>
+    </ng-container>
+    <ng-container matColumnDef="loan">
+      <th mat-header-cell *matHeaderCellDef>Loan</th>
+      <td mat-cell *matCellDef="let row">{{ loanLabel(row) }}</td>
+    </ng-container>
+    <ng-container matColumnDef="amount">
+      <th mat-header-cell *matHeaderCellDef>Amount</th>
+      <td mat-cell *matCellDef="let row">₹{{ row.amount.toLocaleString('en-IN') }}</td>
+    </ng-container>
+    <ng-container matColumnDef="paymentMode">
+      <th mat-header-cell *matHeaderCellDef>Mode</th>
+      <td mat-cell *matCellDef="let row">
+        <mat-chip>{{ row.paymentMode }}</mat-chip>
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="collectionDate">
+      <th mat-header-cell *matHeaderCellDef>Date</th>
+      <td mat-cell *matCellDef="let row">{{ row.collectionDate | date: 'mediumDate' }}</td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="columns"></tr>
+    <tr mat-row *matRowDef="let row; columns: columns"></tr>
+  </table>
+
+  @if (collections().length === 0) {
+    <p class="sc-empty">No collections recorded yet.</p>
+  }
+
+  <mat-paginator
+    [length]="total()"
+    [pageSize]="pageSize()"
+    [pageIndex]="pageIndex()"
+    [pageSizeOptions]="[10, 20, 50]"
+    (page)="onPage($event)"
+  ></mat-paginator>
+}

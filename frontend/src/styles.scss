@@ -1,0 +1,225 @@
+// Include theming for Angular Material with `mat.theme()`.
+// This Sass mixin will define CSS variables that are used for styling Angular Material
+// components according to the Material 3 design spec.
+// Learn more about theming and how to use it for your application's
+// custom components at https://material.angular.dev/guide/theming
+@use '@angular/material' as mat;
+
+html {
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$blue-palette,
+        tertiary: mat.$green-palette,
+      ),
+      typography: Roboto,
+      density: 0,
+    )
+  );
+}
+
+body {
+  // Default the application to a light color theme. This can be changed to
+  // `dark` to enable the dark color theme, or to `light dark` to defer to the
+  // user's system settings.
+  color-scheme: light;
+
+  // Set a default background, font and text colors for the application using
+  // Angular Material's system-level CSS variables. Learn more about these
+  // variables at https://material.angular.dev/guide/system-variables
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+
+  // Reset the user agent margin.
+  margin: 0;
+}
+/* You can add global styles to this file, and also import other style files */
+
+html,
+body {
+  height: 100%;
+}
+body {
+  margin: 0;
+  font-family: Roboto, 'Helvetica Neue', sans-serif;
+}
+
+// Shared form layout used across auth/profile/entity forms.
+.sc-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  &__field {
+    width: 100%;
+  }
+
+  &__error {
+    color: var(--mat-sys-error);
+    font-size: 0.875rem;
+    margin: 0 0 0.5rem;
+  }
+
+  &__submit {
+    height: 44px;
+    margin-top: 0.5rem;
+  }
+
+  &__link {
+    text-align: center;
+    margin-top: 0.75rem;
+    font-size: 0.9rem;
+  }
+
+  &__row {
+    display: flex;
+    gap: 1rem;
+
+    .sc-form__field {
+      flex: 1;
+    }
+  }
+}
+
+.sc-snackbar-error {
+  --mat-snack-bar-button-color: #ffcdd2;
+}
+
+.sc-page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 1rem;
+
+  h1 {
+    margin: 0;
+    font-size: 1.5rem;
+  }
+}
+
+.sc-toolbar-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+// Shared list-page layout (search field, table, loading/empty states) used
+// across Customers/Agents/Loans/Collections/Expenses/Support/Users/Roles.
+.sc-search-field {
+  width: 100%;
+  max-width: 420px;
+  display: block;
+  margin-bottom: 1rem;
+}
+
+.sc-table {
+  width: 100%;
+}
+
+.sc-loading {
+  display: flex;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.sc-empty {
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+  padding: 1.5rem;
+}
+
+// Shared detail-page layout (Customers/Agents/Loans/Support detail pages).
+.sc-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
+  align-items: start;
+}
+
+.sc-notes-card {
+  grid-column: 1 / -1;
+}
+
+.sc-dl {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: 0.5rem 1rem;
+  margin: 0;
+
+  dt {
+    color: var(--mat-sys-on-surface-variant);
+    font-size: 0.875rem;
+  }
+
+  dd {
+    margin: 0;
+  }
+}
+
+.sc-doc-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--mat-sys-outline-variant);
+
+  > span,
+  > a {
+    flex: 1;
+  }
+}
+
+.sc-assign-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+
+  .sc-form__field {
+    flex: 1;
+  }
+}
+
+.sc-summary-row {
+  display: flex;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.sc-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--mat-sys-primary);
+}
+
+.sc-note {
+  background: var(--mat-sys-surface-container);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  margin: 0 0 0.5rem;
+}
+
+.sc-permission-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.sc-permission-group {
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 8px;
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  h4 {
+    margin: 0 0 0.25rem;
+    text-transform: capitalize;
+  }
+}

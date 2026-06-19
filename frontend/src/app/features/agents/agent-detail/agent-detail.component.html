@@ -1,0 +1,93 @@
+@if (loading()) {
+  <div class="sc-loading"><mat-spinner diameter="32"></mat-spinner></div>
+} @else if (agent()) {
+  <div class="sc-page-header">
+    <h1>
+      {{ agent()!.name }} <small>({{ agent()!.agentCode }})</small>
+    </h1>
+    <div class="sc-toolbar-actions">
+      @if (canUpdate) {
+        <a mat-stroked-button [routerLink]="['/agents', agent()!._id, 'edit']">
+          <mat-icon>edit</mat-icon> Edit
+        </a>
+      }
+      <a mat-stroked-button routerLink="/agents">Back</a>
+    </div>
+  </div>
+
+  <div class="sc-detail-grid">
+    <mat-card>
+      <mat-card-header><mat-card-title>Profile</mat-card-title></mat-card-header>
+      <mat-card-content>
+        <dl class="sc-dl">
+          <dt>Mobile</dt>
+          <dd>{{ agent()!.mobile }}</dd>
+          <dt>Email</dt>
+          <dd>{{ agent()!.email || '—' }}</dd>
+          <dt>Area</dt>
+          <dd>{{ agent()!.area || '—' }}</dd>
+          <dt>Status</dt>
+          <dd>{{ agent()!.status }}</dd>
+        </dl>
+      </mat-card-content>
+    </mat-card>
+
+    @if (performance(); as perf) {
+      <mat-card>
+        <mat-card-header><mat-card-title>Performance</mat-card-title></mat-card-header>
+        <mat-card-content>
+          <dl class="sc-dl">
+            <dt>Assigned Customers</dt>
+            <dd>{{ perf.assignedCustomers }}</dd>
+            <dt>Active Loans</dt>
+            <dd>{{ perf.activeLoans }}</dd>
+            <dt>Closed Loans</dt>
+            <dd>{{ perf.closedLoans }}</dd>
+            <dt>Collections Made</dt>
+            <dd>{{ perf.collectionCount }}</dd>
+            <dt>Total Collected</dt>
+            <dd>₹{{ perf.totalCollected.toLocaleString('en-IN') }}</dd>
+          </dl>
+        </mat-card-content>
+      </mat-card>
+    }
+
+    <mat-card class="sc-notes-card">
+      <mat-card-header><mat-card-title>Assigned Customers</mat-card-title></mat-card-header>
+      <mat-card-content>
+        @if (canUpdate) {
+          <div class="sc-assign-row">
+            <mat-form-field appearance="outline" class="sc-form__field">
+              <mat-label>Assign a customer</mat-label>
+              <mat-select [(ngModel)]="selectedToAssign">
+                @for (customer of assignableOptions(); track customer._id) {
+                  <mat-option [value]="customer._id"
+                    >{{ customer.name }} ({{ customer.customerCode }})</mat-option
+                  >
+                }
+              </mat-select>
+            </mat-form-field>
+            <button mat-stroked-button [disabled]="!selectedToAssign()" (click)="assign()">
+              Assign
+            </button>
+          </div>
+        }
+
+        @for (customer of assignedCustomers(); track customer._id) {
+          <div class="sc-doc-row">
+            <a [routerLink]="['/customers', customer._id]"
+              >{{ customer.name }} ({{ customer.customerCode }})</a
+            >
+            @if (canUpdate) {
+              <button mat-icon-button (click)="unassign(customer._id)" matTooltip="Unassign">
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+          </div>
+        } @empty {
+          <p class="sc-empty">No customers assigned yet.</p>
+        }
+      </mat-card-content>
+    </mat-card>
+  </div>
+}

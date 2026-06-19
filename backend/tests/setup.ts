@@ -1,0 +1,14 @@
+process.env.NODE_ENV = 'test';
+process.env.MONGODB_URI = process.env.MONGODB_URI ?? 'mongodb://127.0.0.1:27017/test-placeholder';
+process.env.JWT_ACCESS_SECRET = 'test-access-secret-please-use-32-characters';
+process.env.JWT_REFRESH_SECRET = 'test-refresh-secret-please-use-32-characters';
+process.env.JWT_ACCESS_EXPIRES_IN = '15m';
+process.env.JWT_REFRESH_EXPIRES_IN = '7d';
+process.env.RESET_PASSWORD_TOKEN_EXPIRES_IN = '15m';
+process.env.SEED_ADMIN_EMAIL = 'admin@financecollection.local';
+process.env.SEED_ADMIN_PASSWORD = 'ChangeMe@123';
+process.env.SEED_ADMIN_MOBILE = '9999999999';
+process.env.SEED_ADMIN_NAME = 'System Admin';
+process.env.EMAIL_PROVIDER = 'console';
+process.env.EMAIL_FROM = 'no-reply@financecollection.local';
+process.env.CORS_ORIGIN = 'http://localhost:4200';

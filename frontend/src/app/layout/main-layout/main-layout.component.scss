@@ -1,0 +1,53 @@
+.sc-shell {
+  height: 100vh;
+}
+
+.sc-sidenav {
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+}
+
+.sc-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem;
+
+  &__mark {
+    width: 32px;
+    height: 32px;
+  }
+
+  &__name {
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+}
+
+.sc-nav-item--active {
+  background-color: var(--mat-sys-secondary-container);
+}
+
+.sc-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.sc-topbar__spacer {
+  flex: 1 1 auto;
+}
+
+.sc-user-button {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  text-transform: none;
+}
+
+.sc-content {
+  padding: 1.25rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}

@@ -1,0 +1,66 @@
+<div class="sc-page-header">
+  <h1>Roles &amp; Permissions</h1>
+  @if (canCreate) {
+    <a mat-flat-button color="primary" routerLink="/roles/new">
+      <mat-icon>add</mat-icon> Add Role
+    </a>
+  }
+</div>
+
+@if (loading()) {
+  <div class="sc-loading"><mat-spinner diameter="32"></mat-spinner></div>
+} @else {
+  <table mat-table [dataSource]="roles()" class="sc-table">
+    <ng-container matColumnDef="name">
+      <th mat-header-cell *matHeaderCellDef>Name</th>
+      <td mat-cell *matCellDef="let row">{{ row.name }}</td>
+    </ng-container>
+    <ng-container matColumnDef="description">
+      <th mat-header-cell *matHeaderCellDef>Description</th>
+      <td mat-cell *matCellDef="let row">{{ row.description || '—' }}</td>
+    </ng-container>
+    <ng-container matColumnDef="permissions">
+      <th mat-header-cell *matHeaderCellDef>Permissions</th>
+      <td mat-cell *matCellDef="let row">
+        {{
+          row.permissions.includes('*') ? 'Full access' : row.permissions.length + ' permissions'
+        }}
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="isSystem">
+      <th mat-header-cell *matHeaderCellDef>Type</th>
+      <td mat-cell *matCellDef="let row">
+        <mat-chip>{{ row.isSystem ? 'System' : 'Custom' }}</mat-chip>
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="actions">
+      <th mat-header-cell *matHeaderCellDef></th>
+      <td mat-cell *matCellDef="let row">
+        @if (canUpdate && !row.isSystem) {
+          <a mat-icon-button [routerLink]="['/roles', row._id, 'edit']" matTooltip="Edit">
+            <mat-icon>edit</mat-icon>
+          </a>
+        }
+        @if (canDelete && !row.isSystem) {
+          <button mat-icon-button (click)="remove(row)" matTooltip="Delete">
+            <mat-icon>delete</mat-icon>
+          </button>
+        }
+      </td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="columns"></tr>
+    <tr mat-row *matRowDef="let row; columns: columns"></tr>
+  </table>
+
+  @if (roles().length === 0) {
+    <p class="sc-empty">No roles found.</p>
+  }
+
+  <mat-paginator
+    [length]="total()"
+    [pageSize]="pageSize()"
+    [pageIndex]="pageIndex()"
+    [pageSizeOptions]="[10, 20, 50]"
+    (page)="onPage($event)"
+  ></mat-paginator>
+}

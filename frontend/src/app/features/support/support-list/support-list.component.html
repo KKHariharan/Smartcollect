@@ -1,0 +1,70 @@
+<div class="sc-page-header">
+  <h1>Support Tickets</h1>
+  @if (canCreate) {
+    <a mat-flat-button color="primary" routerLink="/support/new">
+      <mat-icon>add</mat-icon> New Ticket
+    </a>
+  }
+</div>
+
+<mat-form-field appearance="outline" class="sc-search-field">
+  <mat-label>Filter by status</mat-label>
+  <mat-select [value]="statusFilter()" (selectionChange)="onStatusChange($event.value)">
+    <mat-option value="">All</mat-option>
+    <mat-option value="open">Open</mat-option>
+    <mat-option value="in_progress">In Progress</mat-option>
+    <mat-option value="resolved">Resolved</mat-option>
+    <mat-option value="closed">Closed</mat-option>
+  </mat-select>
+</mat-form-field>
+
+@if (loading()) {
+  <div class="sc-loading"><mat-spinner diameter="32"></mat-spinner></div>
+} @else {
+  <table mat-table [dataSource]="tickets()" class="sc-table">
+    <ng-container matColumnDef="ticketNumber">
+      <th mat-header-cell *matHeaderCellDef>Ticket #</th>
+      <td mat-cell *matCellDef="let row">{{ row.ticketNumber }}</td>
+    </ng-container>
+    <ng-container matColumnDef="subject">
+      <th mat-header-cell *matHeaderCellDef>Subject</th>
+      <td mat-cell *matCellDef="let row">{{ row.subject }}</td>
+    </ng-container>
+    <ng-container matColumnDef="customer">
+      <th mat-header-cell *matHeaderCellDef>Customer</th>
+      <td mat-cell *matCellDef="let row">{{ customerLabel(row) }}</td>
+    </ng-container>
+    <ng-container matColumnDef="status">
+      <th mat-header-cell *matHeaderCellDef>Status</th>
+      <td mat-cell *matCellDef="let row">
+        <mat-chip
+          [color]="row.status === 'resolved' || row.status === 'closed' ? 'primary' : undefined"
+        >
+          {{ row.status }}
+        </mat-chip>
+      </td>
+    </ng-container>
+    <ng-container matColumnDef="actions">
+      <th mat-header-cell *matHeaderCellDef></th>
+      <td mat-cell *matCellDef="let row">
+        <a mat-icon-button [routerLink]="['/support', row._id]" matTooltip="View details">
+          <mat-icon>visibility</mat-icon>
+        </a>
+      </td>
+    </ng-container>
+    <tr mat-header-row *matHeaderRowDef="columns"></tr>
+    <tr mat-row *matRowDef="let row; columns: columns"></tr>
+  </table>
+
+  @if (tickets().length === 0) {
+    <p class="sc-empty">No support tickets found.</p>
+  }
+
+  <mat-paginator
+    [length]="total()"
+    [pageSize]="pageSize()"
+    [pageIndex]="pageIndex()"
+    [pageSizeOptions]="[10, 20, 50]"
+    (page)="onPage($event)"
+  ></mat-paginator>
+}

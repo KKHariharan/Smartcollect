@@ -1,0 +1,28 @@
+<div class="sc-page-header">
+  <h1>Welcome back, {{ userName }}</h1>
+</div>
+
+<div class="sc-dashboard-grid">
+  @for (card of cards(); track card.label) {
+    <mat-card class="sc-dashboard-card">
+      <mat-card-content>
+        <mat-icon class="sc-dashboard-card__icon">{{ card.icon }}</mat-icon>
+        <div>
+          <div class="sc-dashboard-card__value">{{ card.value }}</div>
+          <div class="sc-dashboard-card__label">{{ card.label }}</div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  }
+</div>
+
+@if (!loading() && cards().length === 0) {
+  <p>No dashboard data available for your account.</p>
+}
+
+<mat-card class="sc-dashboard-note">
+  <mat-card-content>
+    <mat-icon>insights</mat-icon>
+    <span>Detailed trend charts and exportable reports are coming in a future update.</span>
+  </mat-card-content>
+</mat-card>

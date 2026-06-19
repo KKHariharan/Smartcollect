@@ -1,0 +1,60 @@
+@if (loading()) {
+  <div class="sc-loading"><mat-spinner diameter="32"></mat-spinner></div>
+} @else if (ticket(); as t) {
+  <div class="sc-page-header">
+    <h1>{{ t.ticketNumber }}: {{ t.subject }}</h1>
+    <a mat-stroked-button routerLink="/support">Back</a>
+  </div>
+
+  <div class="sc-detail-grid">
+    <mat-card>
+      <mat-card-header><mat-card-title>Details</mat-card-title></mat-card-header>
+      <mat-card-content>
+        <dl class="sc-dl">
+          <dt>Status</dt>
+          <dd>
+            <mat-chip>{{ t.status }}</mat-chip>
+          </dd>
+          <dt>Description</dt>
+          <dd>{{ t.description }}</dd>
+        </dl>
+
+        @if (canUpdateStatus) {
+          <mat-form-field appearance="outline" class="sc-form__field" style="margin-top: 1rem">
+            <mat-label>Update status</mat-label>
+            <mat-select [value]="t.status" (selectionChange)="updateStatus($event.value)">
+              <mat-option value="open">Open</mat-option>
+              <mat-option value="in_progress">In Progress</mat-option>
+              <mat-option value="resolved">Resolved</mat-option>
+              <mat-option value="closed">Closed</mat-option>
+            </mat-select>
+          </mat-form-field>
+        }
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card class="sc-notes-card">
+      <mat-card-header><mat-card-title>Conversation</mat-card-title></mat-card-header>
+      <mat-card-content>
+        @for (msg of t.messages; track msg.createdAt) {
+          <p class="sc-note">
+            <strong>{{ authorLabel(msg.author) }}</strong> ({{
+              msg.createdAt | date: 'short'
+            }})<br />
+            {{ msg.message }}
+          </p>
+        } @empty {
+          <p class="sc-empty">No messages yet.</p>
+        }
+
+        <form [formGroup]="messageForm" (ngSubmit)="sendMessage()" class="sc-form">
+          <mat-form-field appearance="outline" class="sc-form__field">
+            <mat-label>Reply</mat-label>
+            <textarea matInput formControlName="message" rows="2"></textarea>
+          </mat-form-field>
+          <button mat-stroked-button type="submit" [disabled]="messageForm.invalid">Send</button>
+        </form>
+      </mat-card-content>
+    </mat-card>
+  </div>
+}
