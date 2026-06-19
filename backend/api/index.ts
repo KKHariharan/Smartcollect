@@ -15,5 +15,9 @@ function ensureDbConnected(): Promise<unknown> {
 
 export default async function handler(req: IncomingMessage, res: ServerResponse): Promise<void> {
   await ensureDbConnected();
-  app(req, res);
+  await new Promise<void>((resolve) => {
+    res.on('finish', resolve);
+    res.on('close', resolve);
+    app(req, res);
+  });
 }
