@@ -34,11 +34,11 @@ export class AuthService {
   }
 
   get accessToken(): string | null {
-    return localStorage.getItem(ACCESS_TOKEN_KEY);
+    return sessionStorage.getItem(ACCESS_TOKEN_KEY);
   }
 
   get refreshToken(): string | null {
-    return localStorage.getItem(REFRESH_TOKEN_KEY);
+    return sessionStorage.getItem(REFRESH_TOKEN_KEY);
   }
 
   login(payload: LoginPayload): Observable<ApiResponse<LoginResponse>> {
@@ -78,8 +78,8 @@ export class AuthService {
       >(`${this.baseUrl}/change-password`, payload)
       .pipe(
         tap((res) => {
-          localStorage.setItem(ACCESS_TOKEN_KEY, res.data.accessToken);
-          localStorage.setItem(REFRESH_TOKEN_KEY, res.data.refreshToken);
+          sessionStorage.setItem(ACCESS_TOKEN_KEY, res.data.accessToken);
+          sessionStorage.setItem(REFRESH_TOKEN_KEY, res.data.refreshToken);
         }),
       );
   }
@@ -97,25 +97,25 @@ export class AuthService {
   }
 
   clearSession(): void {
-    localStorage.removeItem(ACCESS_TOKEN_KEY);
-    localStorage.removeItem(REFRESH_TOKEN_KEY);
-    localStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem(ACCESS_TOKEN_KEY);
+    sessionStorage.removeItem(REFRESH_TOKEN_KEY);
+    sessionStorage.removeItem(USER_KEY);
     this.currentUser.set(null);
   }
 
   private persistSession(data: LoginResponse): void {
-    localStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
-    localStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
+    sessionStorage.setItem(ACCESS_TOKEN_KEY, data.accessToken);
+    sessionStorage.setItem(REFRESH_TOKEN_KEY, data.refreshToken);
     this.setUser(data.user);
   }
 
   private setUser(user: AuthUser): void {
-    localStorage.setItem(USER_KEY, JSON.stringify(user));
+    sessionStorage.setItem(USER_KEY, JSON.stringify(user));
     this.currentUser.set(user);
   }
 
   private readCachedUser(): AuthUser | null {
-    const raw = localStorage.getItem(USER_KEY);
+    const raw = sessionStorage.getItem(USER_KEY);
     if (!raw) return null;
     try {
       return JSON.parse(raw) as AuthUser;

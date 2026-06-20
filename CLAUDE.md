@@ -122,7 +122,7 @@ local component state. See `frontend/README.md` for the full breakdown. Key poin
   `authInterceptor` must see 401s *before* `errorInterceptor` does, so it can silently refresh and
   retry without an error toast flashing first.
 - **`AuthService`** (`core/services/auth.service.ts`) holds `currentUser` as a signal, persists
-  tokens in `localStorage`, and exposes `hasPermission(...)` for UI-level gating (nav items,
+  tokens in `sessionStorage`, and exposes `hasPermission(...)` for UI-level gating (nav items,
   buttons) — mirrors but does not replace backend permission checks.
 - Guards: `authGuard` (must be logged in), `permissionGuard` (reads required permissions from
   route `data.permissions`, matching `backend`'s permission strings).

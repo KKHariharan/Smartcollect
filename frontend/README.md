@@ -44,7 +44,7 @@ src/app/
                      strong-password validator, not-found/forbidden pages
 ```
 
-**Auth model**: JWT access + refresh tokens stored in `localStorage` (`AuthService`). The
+**Auth model**: JWT access + refresh tokens stored in `sessionStorage` (`AuthService`). The
 access token's permissions are decoded server-side once at login; `AuthService.hasPermission()`
 checks them client-side for UI gating (nav items, buttons) — the backend is still the source of
 truth and re-checks every request.
