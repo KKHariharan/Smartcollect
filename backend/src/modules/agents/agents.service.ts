@@ -1,12 +1,17 @@
 import type { Request } from 'express';
-import type { FilterQuery } from 'mongoose';
+import { Types, type FilterQuery } from 'mongoose';
 import { Agent, type IAgent } from '../../models/Agent';
 import { Customer } from '../../models/Customer';
 import { User } from '../../models/User';
+import { Role } from '../../models/Role';
+import { Organization } from '../../models/Organization';
 import { Loan } from '../../models/Loan';
 import { Collection } from '../../models/Collection';
 import { AppError } from '../../utils/app-error';
-import { generateCode } from '../../utils/sequence';
+import { hashPassword } from '../../utils/password';
+import { withTransaction } from '../../utils/transaction';
+import { createAgentProfile } from '../../utils/profile-provisioning';
+import { getAccessScope } from '../../utils/access-scope';
 import { recordAuditLog } from '../../middleware/audit';
 import type {
   AssignCustomersDto,
@@ -15,14 +20,48 @@ import type {
   UpdateAgentDto,
 } from './agents.dto';
 
-async function assertLinkedUserExists(userId: string): Promise<void> {
-  const user = await User.findById(userId);
-  if (!user) {
-    throw AppError.badRequest('Linked user does not exist');
+const createdByPopulate = {
+  path: 'createdBy',
+  select: 'name role',
+  populate: { path: 'role', select: 'name' },
+};
+
+async function assertOrganizationExists(organizationId: string): Promise<void> {
+  const organization = await Organization.findById(organizationId);
+  if (!organization) {
+    throw AppError.badRequest('Selected organization does not exist');
   }
 }
 
-export async function listAgents(query: ListAgentsQueryDto) {
+async function resolveOrganizationId(dto: { organizationId?: string }, req: Request) {
+  if (!req.user) throw AppError.unauthorized();
+  if (req.user.accountType === 'super_admin') {
+    if (!dto.organizationId) {
+      throw AppError.badRequest('organizationId is required when creating as a Super Admin');
+    }
+    await assertOrganizationExists(dto.organizationId);
+    return dto.organizationId;
+  }
+  return req.user.organizationId;
+}
+
+async function withAssignedCustomerCounts(agents: IAgent[]) {
+  const agentIds = agents.map((agent) => agent._id);
+  const counts = await Customer.aggregate<{ _id: Types.ObjectId; count: number }>([
+    { $match: { assignedAgent: { $in: agentIds } } },
+    { $group: { _id: '$assignedAgent', count: { $sum: 1 } } },
+  ]);
+  const countMap = new Map(counts.map((c) => [c._id.toString(), c.count]));
+
+  return agents.map((agent) => {
+    const json = agent.toJSON() as Record<string, unknown>;
+    json.assignedCustomersCount = countMap.get(agent._id.toString()) ?? 0;
+    return json;
+  });
+}
+
+export async function listAgents(query: ListAgentsQueryDto, req: Request) {
+  const scope = getAccessScope(req);
   const filter: FilterQuery<IAgent> = {};
   if (query.status) filter.status = query.status;
   if (query.search) {
@@ -32,15 +71,25 @@ export async function listAgents(query: ListAgentsQueryDto) {
       { agentCode: { $regex: query.search, $options: 'i' } },
     ];
   }
+  if (scope.accountType === 'super_admin') {
+    if (query.organizationId) filter.organizationId = query.organizationId;
+  } else {
+    filter.organizationId = scope.organizationId;
+  }
 
   const skip = (query.page - 1) * query.limit;
   const [items, total] = await Promise.all([
-    Agent.find(filter).skip(skip).limit(query.limit).sort({ createdAt: -1 }),
+    Agent.find(filter)
+      .populate(createdByPopulate)
+      .populate('organizationId', 'name code')
+      .skip(skip)
+      .limit(query.limit)
+      .sort({ createdAt: -1 }),
     Agent.countDocuments(filter),
   ]);
 
   return {
-    items,
+    items: await withAssignedCustomerCounts(items),
     pagination: {
       page: query.page,
       limit: query.limit,
@@ -50,8 +99,19 @@ export async function listAgents(query: ListAgentsQueryDto) {
   };
 }
 
-export async function getAgentById(id: string) {
-  const agent = await Agent.findById(id);
+function buildAgentScopeFilter(id: string, req: Request): FilterQuery<IAgent> {
+  const scope = getAccessScope(req);
+  const filter: FilterQuery<IAgent> = { _id: id };
+  if (scope.accountType !== 'super_admin') {
+    filter.organizationId = scope.organizationId;
+  }
+  return filter;
+}
+
+export async function getAgentById(id: string, req: Request) {
+  const agent = await Agent.findOne(buildAgentScopeFilter(id, req))
+    .populate(createdByPopulate)
+    .populate('organizationId', 'name code');
   if (!agent) {
     throw AppError.notFound('Agent not found');
   }
@@ -59,36 +119,84 @@ export async function getAgentById(id: string) {
 }
 
 export async function createAgent(dto: CreateAgentDto, req: Request) {
-  if (dto.linkedUser) {
-    await assertLinkedUserExists(dto.linkedUser);
+  if (!req.user) throw AppError.unauthorized();
+  const creatorId = req.user.sub;
+
+  const organizationId = await resolveOrganizationId(dto, req);
+
+  const agentRole = await Role.findOne({ name: 'Collection Agent' });
+  if (!agentRole) {
+    throw AppError.badRequest('Collection Agent role is not configured — run the seed script');
   }
 
-  const agentCode = await generateCode('AGT', 'agent_seq');
-  const agent = await Agent.create({ ...dto, agentCode });
+  const agentId = await withTransaction(async (session) => {
+    const passwordHash = await hashPassword(dto.password);
+    const [user] = await User.create(
+      [
+        {
+          name: dto.name,
+          email: dto.email,
+          mobile: dto.mobile,
+          passwordHash,
+          role: agentRole.id as string,
+          accountType: 'agent',
+          organizationId,
+        },
+      ],
+      { session },
+    );
+    if (!user) throw new Error('Failed to create linked user account');
 
+    const agent = await createAgentProfile(session, {
+      name: dto.name,
+      mobile: dto.mobile,
+      email: dto.email,
+      area: dto.area,
+      status: dto.status,
+      linkedUser: user._id,
+      createdBy: creatorId,
+      organizationId,
+    });
+
+    return agent.id as string;
+  });
+
+  await recordAuditLog({
+    req,
+    action: 'user.created',
+    entityType: 'User',
+    metadata: { email: dto.email, accountType: 'agent' },
+  });
   await recordAuditLog({
     req,
     action: 'agent.created',
     entityType: 'Agent',
-    entityId: agent.id as string,
-    metadata: { agentCode },
+    entityId: agentId,
   });
 
-  return agent;
+  return getAgentById(agentId, req);
 }
 
 export async function updateAgent(id: string, dto: UpdateAgentDto, req: Request) {
-  if (dto.linkedUser) {
-    await assertLinkedUserExists(dto.linkedUser);
-  }
-
-  const agent = await Agent.findById(id);
+  const agent = await Agent.findOne(buildAgentScopeFilter(id, req));
   if (!agent) {
     throw AppError.notFound('Agent not found');
   }
 
   Object.assign(agent, dto);
-  await agent.save();
+
+  await withTransaction(async (session) => {
+    await agent.save({ session });
+
+    if (agent.linkedUser && (dto.name || dto.email || dto.mobile || dto.status)) {
+      const update: Record<string, unknown> = {};
+      if (dto.name !== undefined) update.name = dto.name;
+      if (dto.email !== undefined) update.email = dto.email;
+      if (dto.mobile !== undefined) update.mobile = dto.mobile;
+      if (dto.status !== undefined) update.isActive = dto.status === 'active';
+      await User.findByIdAndUpdate(agent.linkedUser, update, { session });
+    }
+  });
 
   await recordAuditLog({
     req,
@@ -98,11 +206,11 @@ export async function updateAgent(id: string, dto: UpdateAgentDto, req: Request)
     metadata: { fields: Object.keys(dto) },
   });
 
-  return agent;
+  return getAgentById(id, req);
 }
 
 export async function deleteAgent(id: string, req: Request): Promise<void> {
-  const agent = await Agent.findById(id);
+  const agent = await Agent.findOne(buildAgentScopeFilter(id, req));
   if (!agent) {
     throw AppError.notFound('Agent not found');
   }
@@ -112,7 +220,15 @@ export async function deleteAgent(id: string, req: Request): Promise<void> {
     throw AppError.conflict('Agent has assigned customers and cannot be deleted');
   }
 
-  await agent.softDelete();
+  await withTransaction(async (session) => {
+    agent.isDeleted = true;
+    agent.deletedAt = new Date();
+    await agent.save({ session });
+
+    if (agent.linkedUser) {
+      await User.findByIdAndUpdate(agent.linkedUser, { isActive: false }, { session });
+    }
+  });
 
   await recordAuditLog({
     req,
@@ -122,16 +238,17 @@ export async function deleteAgent(id: string, req: Request): Promise<void> {
   });
 }
 
-export async function getAgentCustomers(id: string) {
-  await getAgentById(id);
+export async function getAgentCustomers(id: string, req: Request) {
+  await getAgentById(id, req);
   return Customer.find({ assignedAgent: id }).sort({ createdAt: -1 });
 }
 
 export async function assignCustomers(id: string, dto: AssignCustomersDto, req: Request) {
-  await getAgentById(id);
+  await getAgentById(id, req);
+  const organizationId = (await Agent.findById(id).select('organizationId'))?.organizationId;
 
   const result = await Customer.updateMany(
-    { _id: { $in: dto.customerIds } },
+    { _id: { $in: dto.customerIds }, organizationId },
     { $set: { assignedAgent: id } },
   );
 
@@ -147,10 +264,11 @@ export async function assignCustomers(id: string, dto: AssignCustomersDto, req: 
 }
 
 export async function unassignCustomers(id: string, dto: AssignCustomersDto, req: Request) {
-  await getAgentById(id);
+  await getAgentById(id, req);
+  const organizationId = (await Agent.findById(id).select('organizationId'))?.organizationId;
 
   const result = await Customer.updateMany(
-    { _id: { $in: dto.customerIds }, assignedAgent: id },
+    { _id: { $in: dto.customerIds }, assignedAgent: id, organizationId },
     { $set: { assignedAgent: null } },
   );
 
@@ -165,8 +283,8 @@ export async function unassignCustomers(id: string, dto: AssignCustomersDto, req
   return { matched: result.matchedCount, modified: result.modifiedCount };
 }
 
-export async function getAgentPerformance(id: string, from?: Date, to?: Date) {
-  await getAgentById(id);
+export async function getAgentPerformance(id: string, req: Request, from?: Date, to?: Date) {
+  await getAgentById(id, req);
 
   const customerIds = await Customer.find({ assignedAgent: id }).distinct('_id');
   const assignedCustomers = customerIds.length;

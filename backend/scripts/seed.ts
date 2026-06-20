@@ -3,8 +3,10 @@ import { env } from '../src/config/env';
 import { logger } from '../src/config/logger';
 import { Role } from '../src/models/Role';
 import { User } from '../src/models/User';
+import { Organization } from '../src/models/Organization';
 import { PERMISSIONS } from '../src/constants/permissions';
 import { hashPassword } from '../src/utils/password';
+import { generateCode } from '../src/utils/sequence';
 
 async function ensureRole(
   name: string,
@@ -20,10 +22,28 @@ async function ensureRole(
   return role;
 }
 
+async function ensureOrganization(name: string) {
+  let organization = await Organization.findOne({ name });
+  if (!organization) {
+    const code = await generateCode('ORG', 'organization_seq');
+    organization = await Organization.create({ name, code, status: 'active' });
+    logger.info(`Created organization: ${name} (${code})`);
+  }
+  return organization;
+}
+
 async function seed(): Promise<void> {
   await connectDB();
 
-  const adminRole = await ensureRole('Admin', 'Full system access', [PERMISSIONS.WILDCARD], true);
+  await ensureOrganization('Default Organization');
+
+  const superAdminRole = await ensureRole(
+    'Super Admin',
+    'Platform owner: manages organizations across the whole system',
+    [PERMISSIONS.WILDCARD],
+    true,
+  );
+  await ensureRole('Admin', 'Full system access', [PERMISSIONS.WILDCARD], true);
 
   await ensureRole(
     'Collection Agent',
@@ -61,10 +81,11 @@ async function seed(): Promise<void> {
       email: env.SEED_ADMIN_EMAIL,
       mobile: env.SEED_ADMIN_MOBILE,
       passwordHash,
-      role: adminRole.id as string,
-      accountType: 'admin',
+      role: superAdminRole.id as string,
+      accountType: 'super_admin',
+      organizationId: null,
     });
-    logger.info(`Created Admin user: ${env.SEED_ADMIN_EMAIL}`);
+    logger.info(`Created Super Admin user: ${env.SEED_ADMIN_EMAIL}`);
   }
 
   await disconnectDB();

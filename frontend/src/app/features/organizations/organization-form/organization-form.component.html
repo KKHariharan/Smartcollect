@@ -1,0 +1,35 @@
+<div class="sc-page-header">
+  <h1>{{ organizationId() ? 'Edit Organization' : 'Add Organization' }}</h1>
+  <a mat-stroked-button routerLink="/organizations">Back to list</a>
+</div>
+
+<mat-card>
+  <mat-card-content>
+    <form [formGroup]="form" (ngSubmit)="submit()" class="sc-form" style="max-width: 560px">
+      <mat-form-field appearance="outline" class="sc-form__field">
+        <mat-label>Name</mat-label>
+        <input matInput formControlName="name" />
+      </mat-form-field>
+
+      @if (organizationId()) {
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Status</mat-label>
+          <mat-select formControlName="status">
+            <mat-option value="active">Active</mat-option>
+            <mat-option value="inactive">Inactive</mat-option>
+          </mat-select>
+        </mat-form-field>
+      }
+
+      <button
+        mat-flat-button
+        color="primary"
+        type="submit"
+        [disabled]="saving()"
+        class="sc-form__submit"
+      >
+        {{ organizationId() ? 'Save changes' : 'Create organization' }}
+      </button>
+    </form>
+  </mat-card-content>
+</mat-card>

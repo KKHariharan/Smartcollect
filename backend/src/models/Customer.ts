@@ -25,7 +25,7 @@ export interface ICustomer extends Document, SoftDeleteFields, SoftDeleteMethods
   customerCode: string;
   name: string;
   mobile: string;
-  email?: string;
+  email: string;
   dob?: Date;
   gender?: Gender;
   aadhaarNumber?: string;
@@ -52,6 +52,8 @@ export interface ICustomer extends Document, SoftDeleteFields, SoftDeleteMethods
   notes: ICustomerNote[];
   assignedAgent: Types.ObjectId | null;
   linkedUser: Types.ObjectId | null;
+  organizationId: Types.ObjectId | null;
+  createdBy?: Types.ObjectId;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -77,7 +79,7 @@ const customerSchema = new Schema<ICustomer>(
     },
     name: { type: String, required: true, trim: true, maxlength: 100 },
     mobile: { type: String, required: true, unique: true, trim: true, maxlength: 15 },
-    email: { type: String, trim: true, lowercase: true, maxlength: 150 },
+    email: { type: String, required: true, trim: true, lowercase: true, maxlength: 150 },
     dob: { type: Date },
     gender: { type: String, enum: GENDERS },
     aadhaarNumber: { type: String, trim: true, sparse: true, unique: true },
@@ -116,13 +118,19 @@ const customerSchema = new Schema<ICustomer>(
     },
     assignedAgent: { type: Schema.Types.ObjectId, ref: 'Agent', default: null },
     linkedUser: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', default: null },
+    createdBy: { type: Schema.Types.ObjectId, ref: 'User' },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true },
 );
 
 customerSchema.index({ assignedAgent: 1 });
-customerSchema.index({ linkedUser: 1 });
+customerSchema.index(
+  { linkedUser: 1 },
+  { unique: true, partialFilterExpression: { linkedUser: { $type: 'objectId' } } },
+);
+customerSchema.index({ organizationId: 1 });
 customerSchema.index({ name: 'text', mobile: 'text', customerCode: 'text' });
 
 customerSchema.plugin(softDeletePlugin);

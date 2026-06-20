@@ -43,6 +43,10 @@
             {{ customer()!.address?.line1 }} {{ customer()!.address?.city }}
             {{ customer()!.address?.state }} {{ customer()!.address?.pincode }}
           </dd>
+          <dt>Created by</dt>
+          <dd>{{ createdByLabel(customer()!) }}</dd>
+          <dt>Created on</dt>
+          <dd>{{ customer()!.createdAt | date: 'mediumDate' }}</dd>
         </dl>
       </mat-card-content>
     </mat-card>

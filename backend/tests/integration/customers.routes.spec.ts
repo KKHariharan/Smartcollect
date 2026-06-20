@@ -5,11 +5,14 @@ import { connectTestDB, clearTestDB, disconnectTestDB } from '../helpers/db';
 import {
   createAgentFixture,
   createCustomerFixture,
+  createOrganizationFixture,
   createRoleFixture,
   createUserFixture,
 } from '../helpers/factories';
 import { env } from '../../src/config/env';
 import { PERMISSIONS } from '../../src/constants/permissions';
+import { User } from '../../src/models/User';
+import { Customer } from '../../src/models/Customer';
 
 let app: Express;
 
@@ -42,22 +45,94 @@ async function createAdminToken() {
 }
 
 describe('Customers CRUD', () => {
-  it('creates and retrieves a customer', async () => {
+  it('creates a customer and its linked login account', async () => {
     const token = await createAdminToken();
+    await createRoleFixture({ name: 'Customer', permissions: [PERMISSIONS.LOANS_READ] });
 
     const createRes = await request(app)
       .post(`${env.API_PREFIX}/customers`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'John Doe', mobile: '9123456789', occupation: 'Farmer' });
+      .send({
+        name: 'John Doe',
+        mobile: '9123456789',
+        email: 'john.doe@example.com',
+        occupation: 'Farmer',
+        password: 'CustomerPass@123',
+        confirmPassword: 'CustomerPass@123',
+      });
 
     expect(createRes.status).toBe(201);
     expect(createRes.body.data.customerCode).toMatch(/^CUST-/);
+
+    const linkedUser = await User.findOne({ email: 'john.doe@example.com' });
+    expect(linkedUser).not.toBeNull();
+    expect(linkedUser?.accountType).toBe('customer');
 
     const getRes = await request(app)
       .get(`${env.API_PREFIX}/customers/${createRes.body.data._id}`)
       .set('Authorization', `Bearer ${token}`);
     expect(getRes.status).toBe(200);
     expect(getRes.body.data.name).toBe('John Doe');
+  });
+
+  it('rejects customer creation when password and confirmPassword do not match', async () => {
+    const token = await createAdminToken();
+    await createRoleFixture({ name: 'Customer' });
+
+    const res = await request(app)
+      .post(`${env.API_PREFIX}/customers`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Jane Doe',
+        mobile: '9123456792',
+        email: 'jane.doe@example.com',
+        password: 'CustomerPass@123',
+        confirmPassword: 'Different@123',
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rolls back customer creation when the email collides with an existing user', async () => {
+    const token = await createAdminToken();
+    const customerRole = await createRoleFixture({ name: 'Customer' });
+    await createUserFixture({
+      email: 'taken.customer@example.com',
+      mobile: '9123456701',
+      roleId: customerRole.id as string,
+    });
+
+    const res = await request(app)
+      .post(`${env.API_PREFIX}/customers`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Jane Doe',
+        mobile: '9123456793',
+        email: 'taken.customer@example.com',
+        password: 'CustomerPass@123',
+        confirmPassword: 'CustomerPass@123',
+      });
+
+    expect(res.status).toBe(409);
+    const orphanedCustomer = await Customer.findOne({ mobile: '9123456793' });
+    expect(orphanedCustomer).toBeNull();
+  });
+
+  it('returns 400 when the Customer role is not seeded', async () => {
+    const token = await createAdminToken();
+
+    const res = await request(app)
+      .post(`${env.API_PREFIX}/customers`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Jane Doe',
+        mobile: '9123456794',
+        email: 'norole.customer@example.com',
+        password: 'CustomerPass@123',
+        confirmPassword: 'CustomerPass@123',
+      });
+
+    expect(res.status).toBe(400);
   });
 
   it('adds a note to a customer', async () => {
@@ -108,16 +183,18 @@ describe('Customers CRUD', () => {
 
 describe('Customers row-level scoping', () => {
   it('lets an agent see only their assigned customers', async () => {
+    const organization = await createOrganizationFixture();
     const agentRole = await createRoleFixture({
       name: 'Collection Agent',
       permissions: [PERMISSIONS.CUSTOMERS_READ],
     });
-    const agentProfile = await createAgentFixture();
+    const agentProfile = await createAgentFixture({ organizationId: organization.id as string });
     const { user: agentUser, password } = await createUserFixture({
       email: 'agent@example.com',
       mobile: '9100000099',
       roleId: agentRole.id as string,
       accountType: 'agent',
+      organizationId: organization.id as string,
     });
     agentProfile.linkedUser = agentUser._id;
     await agentProfile.save();
@@ -126,8 +203,13 @@ describe('Customers row-level scoping', () => {
       name: 'Assigned Customer',
       mobile: '9123450001',
       assignedAgent: agentProfile.id as string,
+      organizationId: organization.id as string,
     });
-    await createCustomerFixture({ name: 'Other Customer', mobile: '9123450002' });
+    await createCustomerFixture({
+      name: 'Other Customer',
+      mobile: '9123450002',
+      organizationId: organization.id as string,
+    });
 
     const token = await loginAs(agentUser.email, password);
 
@@ -141,6 +223,7 @@ describe('Customers row-level scoping', () => {
   });
 
   it('lets a customer see only their own profile', async () => {
+    const organization = await createOrganizationFixture();
     const customerRole = await createRoleFixture({
       name: 'Customer',
       permissions: [PERMISSIONS.CUSTOMERS_READ],
@@ -150,13 +233,19 @@ describe('Customers row-level scoping', () => {
       mobile: '9100000098',
       roleId: customerRole.id as string,
       accountType: 'customer',
+      organizationId: organization.id as string,
     });
     const ownProfile = await createCustomerFixture({
       name: 'Portal Customer',
       mobile: '9123450003',
       linkedUser: portalUser.id as string,
+      organizationId: organization.id as string,
     });
-    await createCustomerFixture({ name: 'Someone Else', mobile: '9123450004' });
+    await createCustomerFixture({
+      name: 'Someone Else',
+      mobile: '9123450004',
+      organizationId: organization.id as string,
+    });
 
     const token = await loginAs(portalUser.email, password);
 

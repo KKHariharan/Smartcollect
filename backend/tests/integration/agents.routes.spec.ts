@@ -5,11 +5,14 @@ import { connectTestDB, clearTestDB, disconnectTestDB } from '../helpers/db';
 import {
   createAgentFixture,
   createCustomerFixture,
+  createOrganizationFixture,
   createRoleFixture,
   createUserFixture,
 } from '../helpers/factories';
 import { env } from '../../src/config/env';
 import { PERMISSIONS } from '../../src/constants/permissions';
+import { User } from '../../src/models/User';
+import { Agent } from '../../src/models/Agent';
 
 let app: Express;
 
@@ -28,35 +31,123 @@ afterAll(async () => {
 
 async function createAdminToken() {
   const role = await createRoleFixture({ name: 'Admin', permissions: [PERMISSIONS.WILDCARD] });
+  const organization = await createOrganizationFixture();
   const { user, password } = await createUserFixture({
     email: 'admin@example.com',
     roleId: role.id as string,
     accountType: 'admin',
+    organizationId: organization.id as string,
   });
   const res = await request(app)
     .post(`${env.API_PREFIX}/auth/login`)
     .send({ email: user.email, password });
-  return res.body.data.accessToken as string;
+  return { token: res.body.data.accessToken as string, organizationId: organization.id as string };
 }
 
 describe('Agents CRUD and assignment', () => {
-  it('creates an agent', async () => {
-    const token = await createAdminToken();
+  it('creates an agent and its linked login account', async () => {
+    const { token } = await createAdminToken();
+    await createRoleFixture({
+      name: 'Collection Agent',
+      permissions: [PERMISSIONS.CUSTOMERS_READ],
+    });
 
     const res = await request(app)
       .post(`${env.API_PREFIX}/agents`)
       .set('Authorization', `Bearer ${token}`)
-      .send({ name: 'Field Agent', mobile: '9123456788', area: 'North Zone' });
+      .send({
+        name: 'Field Agent',
+        mobile: '9123456788',
+        email: 'field.agent@example.com',
+        area: 'North Zone',
+        password: 'AgentPass@123',
+        confirmPassword: 'AgentPass@123',
+      });
 
     expect(res.status).toBe(201);
     expect(res.body.data.agentCode).toMatch(/^AGT-/);
+
+    const linkedUser = await User.findOne({ email: 'field.agent@example.com' });
+    expect(linkedUser).not.toBeNull();
+    expect(linkedUser?.accountType).toBe('agent');
+    expect(String(res.body.data.linkedUser._id ?? res.body.data.linkedUser)).toBe(
+      String(linkedUser?.id),
+    );
+  });
+
+  it('rejects agent creation when password and confirmPassword do not match', async () => {
+    const { token } = await createAdminToken();
+    await createRoleFixture({ name: 'Collection Agent' });
+
+    const res = await request(app)
+      .post(`${env.API_PREFIX}/agents`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Field Agent',
+        mobile: '9123456789',
+        email: 'mismatch.agent@example.com',
+        password: 'AgentPass@123',
+        confirmPassword: 'Different@123',
+      });
+
+    expect(res.status).toBe(400);
+  });
+
+  it('rolls back agent creation when the email collides with an existing user', async () => {
+    const { token } = await createAdminToken();
+    const agentRole = await createRoleFixture({ name: 'Collection Agent' });
+    await createUserFixture({
+      email: 'taken@example.com',
+      mobile: '9123456700',
+      roleId: agentRole.id as string,
+    });
+
+    const res = await request(app)
+      .post(`${env.API_PREFIX}/agents`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Field Agent',
+        mobile: '9123456790',
+        email: 'taken@example.com',
+        password: 'AgentPass@123',
+        confirmPassword: 'AgentPass@123',
+      });
+
+    expect(res.status).toBe(409);
+    const orphanedAgent = await Agent.findOne({ mobile: '9123456790' });
+    expect(orphanedAgent).toBeNull();
+  });
+
+  it('returns 400 when the Collection Agent role is not seeded', async () => {
+    const { token } = await createAdminToken();
+
+    const res = await request(app)
+      .post(`${env.API_PREFIX}/agents`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        name: 'Field Agent',
+        mobile: '9123456791',
+        email: 'norole.agent@example.com',
+        password: 'AgentPass@123',
+        confirmPassword: 'AgentPass@123',
+      });
+
+    expect(res.status).toBe(400);
   });
 
   it('assigns and unassigns customers to an agent', async () => {
-    const token = await createAdminToken();
-    const agent = await createAgentFixture();
-    const customer1 = await createCustomerFixture({ name: 'C1', mobile: '9123450010' });
-    const customer2 = await createCustomerFixture({ name: 'C2', mobile: '9123450011' });
+    const { token, organizationId } = await createAdminToken();
+    const agent = await createAgentFixture({ organizationId });
+    const customer1 = await createCustomerFixture({
+      name: 'C1',
+      mobile: '9123450010',
+      organizationId,
+    });
+    const customer2 = await createCustomerFixture({
+      name: 'C2',
+      mobile: '9123450011',
+      organizationId,
+    });
 
     const assignRes = await request(app)
       .post(`${env.API_PREFIX}/agents/${agent.id}/assign-customers`)
@@ -84,9 +175,9 @@ describe('Agents CRUD and assignment', () => {
   });
 
   it('prevents deleting an agent with assigned customers', async () => {
-    const token = await createAdminToken();
-    const agent = await createAgentFixture();
-    await createCustomerFixture({ assignedAgent: agent.id as string });
+    const { token, organizationId } = await createAdminToken();
+    const agent = await createAgentFixture({ organizationId });
+    await createCustomerFixture({ assignedAgent: agent.id as string, organizationId });
 
     const res = await request(app)
       .delete(`${env.API_PREFIX}/agents/${agent.id}`)
@@ -95,8 +186,8 @@ describe('Agents CRUD and assignment', () => {
   });
 
   it('returns agent performance metrics', async () => {
-    const token = await createAdminToken();
-    const agent = await createAgentFixture();
+    const { token, organizationId } = await createAdminToken();
+    const agent = await createAgentFixture({ organizationId });
 
     const res = await request(app)
       .get(`${env.API_PREFIX}/agents/${agent.id}/performance`)

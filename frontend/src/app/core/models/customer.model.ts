@@ -31,7 +31,7 @@ export interface Customer {
   customerCode: string;
   name: string;
   mobile: string;
-  email?: string;
+  email: string;
   dob?: string;
   gender?: Gender;
   aadhaarNumber?: string;
@@ -49,6 +49,8 @@ export interface Customer {
   notes: CustomerNote[];
   assignedAgent: { _id: string; name: string; agentCode: string } | string | null;
   linkedUser: string | null;
+  organizationId?: { _id: string; name: string; code: string } | string | null;
+  createdBy?: { _id: string; name: string; role: { name: string } | string } | string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -57,7 +59,7 @@ export interface Customer {
 export interface CreateCustomerPayload {
   name: string;
   mobile: string;
-  email?: string;
+  email: string;
   dob?: string;
   gender?: Gender;
   aadhaarNumber?: string;
@@ -67,8 +69,13 @@ export interface CreateCustomerPayload {
   monthlyIncome?: number;
   nominee?: CustomerNominee;
   assignedAgent?: string;
+  password: string;
+  confirmPassword: string;
+  organizationId?: string;
 }
 
-export type UpdateCustomerPayload = Partial<CreateCustomerPayload> & { isActive?: boolean };
+export type UpdateCustomerPayload = Partial<
+  Omit<CreateCustomerPayload, 'password' | 'confirmPassword'>
+> & { isActive?: boolean };
 
 export type DocumentSlot = 'photo' | 'aadhaarCopy' | 'panCopy' | 'other';

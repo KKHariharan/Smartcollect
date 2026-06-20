@@ -11,6 +11,11 @@ export const PERMISSIONS = {
   ROLES_UPDATE: 'roles:update',
   ROLES_DELETE: 'roles:delete',
 
+  ORGANIZATIONS_READ: 'organizations:read',
+  ORGANIZATIONS_CREATE: 'organizations:create',
+  ORGANIZATIONS_UPDATE: 'organizations:update',
+  ORGANIZATIONS_DELETE: 'organizations:delete',
+
   AUDIT_READ: 'audit:read',
 
   CUSTOMERS_READ: 'customers:read',

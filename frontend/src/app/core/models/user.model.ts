@@ -1,4 +1,4 @@
-export type AccountType = 'admin' | 'agent' | 'customer';
+export type AccountType = 'super_admin' | 'admin' | 'agent' | 'customer';
 
 export interface UserRoleSummary {
   id: string;
@@ -12,9 +12,16 @@ export interface AuthUser {
   email: string;
   mobile: string;
   accountType: AccountType;
+  organizationId: string | null;
   isActive: boolean;
   role: UserRoleSummary;
   lastLoginAt: string | null;
+}
+
+export interface UserCreatedBySummary {
+  _id: string;
+  name: string;
+  role: { name: string } | string;
 }
 
 export interface User {
@@ -23,6 +30,8 @@ export interface User {
   email: string;
   mobile: string;
   accountType: AccountType;
+  organizationId: { _id: string; name: string; code: string } | string | null;
+  createdBy?: UserCreatedBySummary | string | null;
   isActive: boolean;
   role: { _id: string; name: string; permissions: string[] } | string;
   lastLoginAt: string | null;
@@ -35,8 +44,10 @@ export interface CreateUserPayload {
   email: string;
   mobile: string;
   password: string;
-  role: string;
+  confirmPassword: string;
   accountType: AccountType;
+  role?: string;
+  organizationId?: string;
 }
 
 export interface UpdateUserPayload {
@@ -44,6 +55,5 @@ export interface UpdateUserPayload {
   email?: string;
   mobile?: string;
   role?: string;
-  accountType?: AccountType;
   isActive?: boolean;
 }

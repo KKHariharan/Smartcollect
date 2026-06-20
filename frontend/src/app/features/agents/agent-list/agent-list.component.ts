@@ -35,7 +35,17 @@ export class AgentListComponent implements OnInit {
   private readonly agentsService = inject(AgentsService);
   readonly authService = inject(AuthService);
 
-  readonly columns = ['agentCode', 'name', 'mobile', 'area', 'status', 'actions'];
+  readonly columns = [
+    'agentCode',
+    'name',
+    'email',
+    'mobile',
+    'organization',
+    'createdBy',
+    'assignedCustomersCount',
+    'status',
+    'actions',
+  ];
   readonly agents = signal<Agent[]>([]);
   readonly total = signal(0);
   readonly loading = signal(true);
@@ -77,5 +87,18 @@ export class AgentListComponent implements OnInit {
     this.pageIndex.set(event.pageIndex);
     this.pageSize.set(event.pageSize);
     this.load();
+  }
+
+  organizationLabel(agent: Agent): string {
+    const organization = agent.organizationId;
+    if (!organization) return '—';
+    return typeof organization === 'string' ? organization : organization.name;
+  }
+
+  createdByLabel(agent: Agent): string {
+    const createdBy = agent.createdBy;
+    if (!createdBy || typeof createdBy === 'string') return '—';
+    const roleName = typeof createdBy.role === 'string' ? createdBy.role : createdBy.role.name;
+    return `${createdBy.name} (${roleName})`;
   }
 }

@@ -12,6 +12,7 @@ const baseAccessPayload = {
   permissions: ['*'],
   accountType: 'admin' as const,
   profileId: null,
+  organizationId: 'org-1',
 };
 
 describe('jwt utils', () => {

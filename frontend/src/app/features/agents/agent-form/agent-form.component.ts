@@ -8,6 +8,11 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { AgentsService } from '../../../core/services/agents.service';
+import { OrganizationsService } from '../../../core/services/organizations.service';
+import { AuthService } from '../../../core/services/auth.service';
+import { Organization } from '../../../core/models/organization.model';
+import { strongPasswordValidator } from '../../../shared/validators/strong-password.validator';
+import { passwordMatchValidator } from '../../../shared/validators/password-match.validator';
 
 @Component({
   selector: 'app-agent-form',
@@ -26,25 +31,43 @@ import { AgentsService } from '../../../core/services/agents.service';
 export class AgentFormComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly agentsService = inject(AgentsService);
+  private readonly organizationsService = inject(OrganizationsService);
+  private readonly authService = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
 
   readonly agentId = signal<string | null>(null);
   readonly saving = signal(false);
+  readonly organizations = signal<Organization[]>([]);
+  readonly isSuperAdmin = this.authService.currentUser()?.accountType === 'super_admin';
 
-  readonly form = this.fb.nonNullable.group({
-    name: ['', [Validators.required, Validators.minLength(2)]],
-    mobile: ['', [Validators.required, Validators.pattern(/^[0-9]{10}$/)]],
-    email: [''],
-    area: [''],
-    status: ['active' as 'active' | 'inactive'],
-  });
+  readonly form = this.fb.nonNullable.group(
+    {
+      name: ['', [Validators.required, Validators.minLength(2)]],
+      mobile: ['', [Validators.required, Validators.pattern(/^[0-9]{10}$/)]],
+      email: ['', [Validators.required, Validators.email]],
+      area: [''],
+      status: ['active' as 'active' | 'inactive'],
+      password: ['', [strongPasswordValidator]],
+      confirmPassword: [''],
+      organizationId: [''],
+    },
+    { validators: [passwordMatchValidator] },
+  );
 
   ngOnInit(): void {
+    if (this.isSuperAdmin) {
+      this.organizationsService
+        .list({ limit: 100 })
+        .subscribe((res) => this.organizations.set(res.data.items));
+    }
+
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.agentId.set(id);
+      this.form.controls.password.clearValidators();
+      this.form.controls.password.updateValueAndValidity();
       this.agentsService.getById(id).subscribe((res) => {
         const agent = res.data;
         this.form.patchValue({
@@ -55,6 +78,9 @@ export class AgentFormComponent implements OnInit {
           status: agent.status,
         });
       });
+    } else {
+      this.form.controls.password.addValidators(Validators.required);
+      this.form.controls.confirmPassword.addValidators(Validators.required);
     }
   }
 
@@ -65,13 +91,27 @@ export class AgentFormComponent implements OnInit {
     }
 
     const raw = this.form.getRawValue();
-    const payload = { ...raw, email: raw.email || undefined, area: raw.area || undefined };
-
     this.saving.set(true);
     const id = this.agentId();
+
     const request = id
-      ? this.agentsService.update(id, payload)
-      : this.agentsService.create(payload);
+      ? this.agentsService.update(id, {
+          name: raw.name,
+          mobile: raw.mobile,
+          email: raw.email,
+          area: raw.area || undefined,
+          status: raw.status,
+        })
+      : this.agentsService.create({
+          name: raw.name,
+          mobile: raw.mobile,
+          email: raw.email,
+          area: raw.area || undefined,
+          status: raw.status,
+          password: raw.password,
+          confirmPassword: raw.confirmPassword,
+          organizationId: this.isSuperAdmin ? raw.organizationId : undefined,
+        });
 
     request.subscribe({
       next: (res) => {

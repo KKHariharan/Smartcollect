@@ -36,7 +36,17 @@ export class CustomerListComponent implements OnInit {
   private readonly customersService = inject(CustomersService);
   readonly authService = inject(AuthService);
 
-  readonly columns = ['customerCode', 'name', 'mobile', 'assignedAgent', 'isActive', 'actions'];
+  readonly columns = [
+    'customerCode',
+    'name',
+    'email',
+    'mobile',
+    'organization',
+    'createdBy',
+    'assignedAgent',
+    'isActive',
+    'actions',
+  ];
   readonly customers = signal<Customer[]>([]);
   readonly total = signal(0);
   readonly loading = signal(true);
@@ -84,5 +94,18 @@ export class CustomerListComponent implements OnInit {
     const agent = customer.assignedAgent;
     if (!agent) return 'Unassigned';
     return typeof agent === 'string' ? agent : agent.name;
+  }
+
+  organizationLabel(customer: Customer): string {
+    const organization = customer.organizationId;
+    if (!organization) return '—';
+    return typeof organization === 'string' ? organization : organization.name;
+  }
+
+  createdByLabel(customer: Customer): string {
+    const createdBy = customer.createdBy;
+    if (!createdBy || typeof createdBy === 'string') return '—';
+    const roleName = typeof createdBy.role === 'string' ? createdBy.role : createdBy.role.name;
+    return `${createdBy.name} (${roleName})`;
   }
 }

@@ -1,4 +1,5 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
@@ -28,6 +29,7 @@ const DOCUMENT_SLOTS: { slot: SingleDocumentSlot; label: string }[] = [
   imports: [
     ReactiveFormsModule,
     RouterLink,
+    DatePipe,
     MatCardModule,
     MatButtonModule,
     MatIconModule,
@@ -109,6 +111,13 @@ export class CustomerDetailComponent implements OnInit {
     const agent = customer.assignedAgent;
     if (!agent) return 'Unassigned';
     return typeof agent === 'string' ? agent : `${agent.name} (${agent.agentCode})`;
+  }
+
+  createdByLabel(customer: Customer): string {
+    const createdBy = customer.createdBy;
+    if (!createdBy || typeof createdBy === 'string') return '—';
+    const roleName = typeof createdBy.role === 'string' ? createdBy.role : createdBy.role.name;
+    return `${createdBy.name} (${roleName})`;
   }
 
   getDocument(customer: Customer, slot: SingleDocumentSlot): CustomerDocumentFile | undefined {

@@ -19,6 +19,8 @@
     "test:watch": "jest --watch --runInBand",
     "test:coverage": "jest --coverage --runInBand",
     "seed": "tsx scripts/seed.ts",
+    "find-orphaned-profiles": "tsx scripts/find-orphaned-profiles.ts",
+    "migrate-link-profiles": "tsx scripts/migrate-link-profiles.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {

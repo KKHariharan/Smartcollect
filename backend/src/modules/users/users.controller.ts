@@ -5,12 +5,12 @@ import * as usersService from './users.service';
 import type { CreateUserDto, ListUsersQueryDto, UpdateUserDto } from './users.dto';
 
 export const listUsers = asyncHandler(async (req: Request, res: Response) => {
-  const result = await usersService.listUsers(req.query as unknown as ListUsersQueryDto);
+  const result = await usersService.listUsers(req.query as unknown as ListUsersQueryDto, req);
   sendSuccess(res, result, 'Users retrieved');
 });
 
 export const getUser = asyncHandler(async (req: Request, res: Response) => {
-  const user = await usersService.getUserById(req.params.id as string);
+  const user = await usersService.getUserById(req.params.id as string, req);
   sendSuccess(res, user, 'User retrieved');
 });
 

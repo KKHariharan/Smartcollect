@@ -1,4 +1,5 @@
 import { Component, OnInit, computed, inject, signal } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { MatCardModule } from '@angular/material/card';
@@ -23,6 +24,7 @@ import { PERMISSIONS } from '../../../core/constants/permissions';
   imports: [
     FormsModule,
     RouterLink,
+    DatePipe,
     MatCardModule,
     MatButtonModule,
     MatIconModule,
@@ -95,5 +97,12 @@ export class AgentDetailComponent implements OnInit {
       this.snackBar.open('Customer unassigned', 'Dismiss', { duration: 3000 });
       this.refreshCustomers();
     });
+  }
+
+  createdByLabel(agent: Agent): string {
+    const createdBy = agent.createdBy;
+    if (!createdBy || typeof createdBy === 'string') return '—';
+    const roleName = typeof createdBy.role === 'string' ? createdBy.role : createdBy.role.name;
+    return `${createdBy.name} (${roleName})`;
   }
 }

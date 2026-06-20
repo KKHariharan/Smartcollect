@@ -9,7 +9,12 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { CustomersService } from '../../../core/services/customers.service';
 import { AgentsService } from '../../../core/services/agents.service';
+import { OrganizationsService } from '../../../core/services/organizations.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { Agent } from '../../../core/models/agent.model';
+import { Organization } from '../../../core/models/organization.model';
+import { strongPasswordValidator } from '../../../shared/validators/strong-password.validator';
+import { passwordMatchValidator } from '../../../shared/validators/password-match.validator';
 
 @Component({
   selector: 'app-customer-form',
@@ -29,6 +34,8 @@ export class CustomerFormComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly customersService = inject(CustomersService);
   private readonly agentsService = inject(AgentsService);
+  private readonly organizationsService = inject(OrganizationsService);
+  private readonly authService = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
@@ -36,28 +43,43 @@ export class CustomerFormComponent implements OnInit {
   readonly customerId = signal<string | null>(null);
   readonly saving = signal(false);
   readonly agents = signal<Agent[]>([]);
+  readonly organizations = signal<Organization[]>([]);
+  readonly isSuperAdmin = this.authService.currentUser()?.accountType === 'super_admin';
 
-  readonly form = this.fb.nonNullable.group({
-    name: ['', [Validators.required, Validators.minLength(2)]],
-    mobile: ['', [Validators.required, Validators.pattern(/^[0-9]{10}$/)]],
-    email: [''],
-    occupation: [''],
-    monthlyIncome: [null as number | null],
-    assignedAgent: [''],
-    address: this.fb.nonNullable.group({
-      line1: [''],
-      city: [''],
-      state: [''],
-      pincode: [''],
-    }),
-  });
+  readonly form = this.fb.nonNullable.group(
+    {
+      name: ['', [Validators.required, Validators.minLength(2)]],
+      mobile: ['', [Validators.required, Validators.pattern(/^[0-9]{10}$/)]],
+      email: ['', [Validators.required, Validators.email]],
+      occupation: [''],
+      monthlyIncome: [null as number | null],
+      assignedAgent: [''],
+      address: this.fb.nonNullable.group({
+        line1: [''],
+        city: [''],
+        state: [''],
+        pincode: [''],
+      }),
+      password: ['', [strongPasswordValidator]],
+      confirmPassword: [''],
+      organizationId: [''],
+    },
+    { validators: [passwordMatchValidator] },
+  );
 
   ngOnInit(): void {
     this.agentsService.list({ limit: 100 }).subscribe((res) => this.agents.set(res.data.items));
+    if (this.isSuperAdmin) {
+      this.organizationsService
+        .list({ limit: 100 })
+        .subscribe((res) => this.organizations.set(res.data.items));
+    }
 
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.customerId.set(id);
+      this.form.controls.password.clearValidators();
+      this.form.controls.password.updateValueAndValidity();
       this.customersService.getById(id).subscribe((res) => {
         const customer = res.data;
         this.form.patchValue({
@@ -73,6 +95,9 @@ export class CustomerFormComponent implements OnInit {
           address: customer.address,
         });
       });
+    } else {
+      this.form.controls.password.addValidators(Validators.required);
+      this.form.controls.confirmPassword.addValidators(Validators.required);
     }
   }
 
@@ -83,18 +108,26 @@ export class CustomerFormComponent implements OnInit {
     }
 
     const raw = this.form.getRawValue();
-    const payload = {
-      ...raw,
+    const profile = {
+      name: raw.name,
+      mobile: raw.mobile,
+      email: raw.email,
+      occupation: raw.occupation || undefined,
       monthlyIncome: raw.monthlyIncome ?? undefined,
       assignedAgent: raw.assignedAgent || undefined,
-      email: raw.email || undefined,
+      address: raw.address,
     };
 
     this.saving.set(true);
     const id = this.customerId();
     const request = id
-      ? this.customersService.update(id, payload)
-      : this.customersService.create(payload);
+      ? this.customersService.update(id, profile)
+      : this.customersService.create({
+          ...profile,
+          password: raw.password,
+          confirmPassword: raw.confirmPassword,
+          organizationId: this.isSuperAdmin ? raw.organizationId : undefined,
+        });
 
     request.subscribe({
       next: (res) => {

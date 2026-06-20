@@ -8,6 +8,7 @@ import swaggerSpec from './docs/swagger';
 import authRoutes from './modules/auth/auth.routes';
 import usersRoutes from './modules/users/users.routes';
 import rolesRoutes from './modules/roles/roles.routes';
+import organizationsRoutes from './modules/organizations/organizations.routes';
 import customersRoutes from './modules/customers/customers.routes';
 import agentsRoutes from './modules/agents/agents.routes';
 import loansRoutes from './modules/loans/loans.routes';
@@ -37,6 +38,7 @@ export function createApp(): Express {
   apiRouter.use('/auth', authRoutes);
   apiRouter.use('/users', usersRoutes);
   apiRouter.use('/roles', rolesRoutes);
+  apiRouter.use('/organizations', organizationsRoutes);
   apiRouter.use('/customers', customersRoutes);
   apiRouter.use('/agents', agentsRoutes);
   apiRouter.use('/loans', loansRoutes);

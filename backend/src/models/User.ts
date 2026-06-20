@@ -5,7 +5,7 @@ import {
   type SoftDeleteMethods,
 } from './plugins/soft-delete.plugin';
 
-export const ACCOUNT_TYPES = ['admin', 'agent', 'customer'] as const;
+export const ACCOUNT_TYPES = ['super_admin', 'admin', 'agent', 'customer'] as const;
 export type AccountType = (typeof ACCOUNT_TYPES)[number];
 
 export interface IUser extends Document, SoftDeleteFields, SoftDeleteMethods {
@@ -15,6 +15,8 @@ export interface IUser extends Document, SoftDeleteFields, SoftDeleteMethods {
   passwordHash: string;
   role: Types.ObjectId;
   accountType: AccountType;
+  organizationId: Types.ObjectId | null;
+  createdBy?: Types.ObjectId;
   isActive: boolean;
   tokenVersion: number;
   refreshTokenHash: string | null;
@@ -63,6 +65,15 @@ const userSchema = new Schema<IUser>(
       type: String,
       enum: ACCOUNT_TYPES,
       required: true,
+    },
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      default: null,
+    },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: 'User',
     },
     isActive: {
       type: Boolean,
@@ -115,6 +126,7 @@ const userSchema = new Schema<IUser>(
 
 userSchema.index({ role: 1 });
 userSchema.index({ accountType: 1 });
+userSchema.index({ organizationId: 1 });
 
 userSchema.plugin(softDeletePlugin);
 

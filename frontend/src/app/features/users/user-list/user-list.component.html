@@ -7,6 +7,33 @@
   }
 </div>
 
+<div class="sc-form__row">
+  <mat-form-field appearance="outline" class="sc-form__field">
+    <mat-label>Role</mat-label>
+    <mat-select [value]="roleFilter()" (selectionChange)="onRoleFilterChange($event.value)">
+      <mat-option value="">All roles</mat-option>
+      @for (role of roles(); track role._id) {
+        <mat-option [value]="role._id">{{ role.name }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  @if (isSuperAdmin()) {
+    <mat-form-field appearance="outline" class="sc-form__field">
+      <mat-label>Organization</mat-label>
+      <mat-select
+        [value]="organizationFilter()"
+        (selectionChange)="onOrganizationFilterChange($event.value)"
+      >
+        <mat-option value="">All organizations</mat-option>
+        @for (organization of organizations(); track organization._id) {
+          <mat-option [value]="organization._id">{{ organization.name }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+  }
+</div>
+
 @if (loading()) {
   <div class="sc-loading"><mat-spinner diameter="32"></mat-spinner></div>
 } @else {
@@ -19,6 +46,10 @@
       <th mat-header-cell *matHeaderCellDef>Email</th>
       <td mat-cell *matCellDef="let row">{{ row.email }}</td>
     </ng-container>
+    <ng-container matColumnDef="mobile">
+      <th mat-header-cell *matHeaderCellDef>Mobile</th>
+      <td mat-cell *matCellDef="let row">{{ row.mobile }}</td>
+    </ng-container>
     <ng-container matColumnDef="accountType">
       <th mat-header-cell *matHeaderCellDef>Account Type</th>
       <td mat-cell *matCellDef="let row">
@@ -29,6 +60,14 @@
       <th mat-header-cell *matHeaderCellDef>Role</th>
       <td mat-cell *matCellDef="let row">{{ roleLabel(row) }}</td>
     </ng-container>
+    <ng-container matColumnDef="organization">
+      <th mat-header-cell *matHeaderCellDef>Organization</th>
+      <td mat-cell *matCellDef="let row">{{ organizationLabel(row) }}</td>
+    </ng-container>
+    <ng-container matColumnDef="createdBy">
+      <th mat-header-cell *matHeaderCellDef>Created By</th>
+      <td mat-cell *matCellDef="let row">{{ createdByLabel(row) }}</td>
+    </ng-container>
     <ng-container matColumnDef="isActive">
       <th mat-header-cell *matHeaderCellDef>Status</th>
       <td mat-cell *matCellDef="let row">
@@ -36,6 +75,10 @@
           row.isActive ? 'Active' : 'Inactive'
         }}</mat-chip>
       </td>
+    </ng-container>
+    <ng-container matColumnDef="createdAt">
+      <th mat-header-cell *matHeaderCellDef>Created Date</th>
+      <td mat-cell *matCellDef="let row">{{ row.createdAt | date: 'mediumDate' }}</td>
     </ng-container>
     <ng-container matColumnDef="actions">
       <th mat-header-cell *matHeaderCellDef></th>

@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { GENDERS } from '../../models/Customer';
-import { emailSchema, mobileSchema, objectIdSchema } from '../../utils/validators';
+import {
+  emailSchema,
+  mobileSchema,
+  objectIdSchema,
+  strongPasswordSchema,
+} from '../../utils/validators';
 
 const addressSchema = z.object({
   line1: z.string().trim().max(200).optional(),
@@ -19,10 +24,10 @@ const nomineeSchema = z.object({
   mobile: mobileSchema.optional(),
 });
 
-export const createCustomerSchema = z.object({
+const customerProfileFieldsSchema = z.object({
   name: z.string().trim().min(2).max(100),
   mobile: mobileSchema,
-  email: emailSchema.optional(),
+  email: emailSchema,
   dob: z.coerce.date().optional(),
   gender: z.enum(GENDERS).optional(),
   aadhaarNumber: z
@@ -40,11 +45,21 @@ export const createCustomerSchema = z.object({
   monthlyIncome: z.coerce.number().min(0).optional(),
   nominee: nomineeSchema.optional(),
   assignedAgent: objectIdSchema.optional(),
-  linkedUser: objectIdSchema.optional(),
 });
+
+export const createCustomerSchema = customerProfileFieldsSchema
+  .extend({
+    password: strongPasswordSchema,
+    confirmPassword: z.string(),
+    organizationId: objectIdSchema.optional(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
 export type CreateCustomerDto = z.infer<typeof createCustomerSchema>;
 
-export const updateCustomerSchema = createCustomerSchema.partial().extend({
+export const updateCustomerSchema = customerProfileFieldsSchema.partial().extend({
   isActive: z.boolean().optional(),
 });
 export type UpdateCustomerDto = z.infer<typeof updateCustomerSchema>;
@@ -59,6 +74,7 @@ export const listCustomersQuerySchema = z.object({
   search: z.string().trim().optional(),
   assignedAgent: objectIdSchema.optional(),
   isActive: z.coerce.boolean().optional(),
+  organizationId: objectIdSchema.optional(),
 });
 export type ListCustomersQueryDto = z.infer<typeof listCustomersQuerySchema>;
 

@@ -53,6 +53,12 @@ export const NAV_ITEMS: NavItem[] = [
     permissions: [PERMISSIONS.ROLES_READ],
   },
   {
+    label: 'Organizations',
+    icon: 'corporate_fare',
+    path: '/organizations',
+    permissions: [PERMISSIONS.ORGANIZATIONS_READ],
+  },
+  {
     label: 'Settings',
     icon: 'settings',
     path: '/settings',

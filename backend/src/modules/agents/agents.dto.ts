@@ -1,18 +1,33 @@
 import { z } from 'zod';
 import { AGENT_STATUSES } from '../../models/Agent';
-import { emailSchema, mobileSchema, objectIdSchema } from '../../utils/validators';
+import {
+  emailSchema,
+  mobileSchema,
+  objectIdSchema,
+  strongPasswordSchema,
+} from '../../utils/validators';
 
-export const createAgentSchema = z.object({
+const agentProfileFieldsSchema = z.object({
   name: z.string().trim().min(2).max(100),
   mobile: mobileSchema,
-  email: emailSchema.optional(),
+  email: emailSchema,
   area: z.string().trim().max(100).optional(),
   status: z.enum(AGENT_STATUSES).optional(),
-  linkedUser: objectIdSchema.optional(),
 });
+
+export const createAgentSchema = agentProfileFieldsSchema
+  .extend({
+    password: strongPasswordSchema,
+    confirmPassword: z.string(),
+    organizationId: objectIdSchema.optional(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
 export type CreateAgentDto = z.infer<typeof createAgentSchema>;
 
-export const updateAgentSchema = createAgentSchema.partial();
+export const updateAgentSchema = agentProfileFieldsSchema.partial();
 export type UpdateAgentDto = z.infer<typeof updateAgentSchema>;
 
 export const agentIdParamSchema = z.object({
@@ -24,6 +39,7 @@ export const listAgentsQuerySchema = z.object({
   limit: z.coerce.number().int().positive().max(100).default(20),
   search: z.string().trim().optional(),
   status: z.enum(AGENT_STATUSES).optional(),
+  organizationId: objectIdSchema.optional(),
 });
 export type ListAgentsQueryDto = z.infer<typeof listAgentsQuerySchema>;
 

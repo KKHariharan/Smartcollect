@@ -2,8 +2,13 @@ import type { Request } from 'express';
 import { Types, type FilterQuery } from 'mongoose';
 import { Customer, type ICustomer } from '../../models/Customer';
 import { Agent } from '../../models/Agent';
+import { User } from '../../models/User';
+import { Role } from '../../models/Role';
+import { Organization } from '../../models/Organization';
 import { AppError } from '../../utils/app-error';
-import { generateCode } from '../../utils/sequence';
+import { hashPassword } from '../../utils/password';
+import { withTransaction } from '../../utils/transaction';
+import { createCustomerProfile } from '../../utils/profile-provisioning';
 import { recordAuditLog } from '../../middleware/audit';
 import { getAccessScope, type AccessScope } from '../../utils/access-scope';
 import { storageProvider, type UploadedFile } from '../../providers/storage.provider';
@@ -15,17 +20,45 @@ import type {
   UpdateCustomerDto,
 } from './customers.dto';
 
+const createdByPopulate = {
+  path: 'createdBy',
+  select: 'name role',
+  populate: { path: 'role', select: 'name' },
+};
+
+async function assertOrganizationExists(organizationId: string): Promise<void> {
+  const organization = await Organization.findById(organizationId);
+  if (!organization) {
+    throw AppError.badRequest('Selected organization does not exist');
+  }
+}
+
+async function resolveOrganizationId(dto: { organizationId?: string }, req: Request) {
+  if (!req.user) throw AppError.unauthorized();
+  if (req.user.accountType === 'super_admin') {
+    if (!dto.organizationId) {
+      throw AppError.badRequest('organizationId is required when creating as a Super Admin');
+    }
+    await assertOrganizationExists(dto.organizationId);
+    return dto.organizationId;
+  }
+  return req.user.organizationId;
+}
+
 function applyCustomerScope(
   filter: FilterQuery<ICustomer>,
   scope: AccessScope,
 ): FilterQuery<ICustomer> {
+  let scoped = filter;
   if (scope.accountType === 'agent') {
-    return { ...filter, assignedAgent: scope.profileId };
+    scoped = { ...scoped, assignedAgent: scope.profileId };
+  } else if (scope.accountType === 'customer') {
+    scoped = { ...scoped, _id: scope.profileId };
   }
-  if (scope.accountType === 'customer') {
-    return { ...filter, _id: scope.profileId };
+  if (scope.accountType !== 'super_admin') {
+    scoped = { ...scoped, organizationId: scope.organizationId };
   }
-  return filter;
+  return scoped;
 }
 
 export async function listCustomers(query: ListCustomersQueryDto, req: Request) {
@@ -40,12 +73,17 @@ export async function listCustomers(query: ListCustomersQueryDto, req: Request) 
       { customerCode: { $regex: query.search, $options: 'i' } },
     ];
   }
+  if (scope.accountType === 'super_admin' && query.organizationId) {
+    filter.organizationId = query.organizationId;
+  }
   filter = applyCustomerScope(filter, scope);
 
   const skip = (query.page - 1) * query.limit;
   const [items, total] = await Promise.all([
     Customer.find(filter)
       .populate('assignedAgent', 'name agentCode')
+      .populate('organizationId', 'name code')
+      .populate(createdByPopulate)
       .skip(skip)
       .limit(query.limit)
       .sort({ createdAt: -1 }),
@@ -66,7 +104,10 @@ export async function listCustomers(query: ListCustomersQueryDto, req: Request) 
 export async function getCustomerById(id: string, req: Request) {
   const scope = getAccessScope(req);
   const filter = applyCustomerScope({ _id: id }, scope);
-  const customer = await Customer.findOne(filter).populate('assignedAgent', 'name agentCode');
+  const customer = await Customer.findOne(filter)
+    .populate('assignedAgent', 'name agentCode')
+    .populate('organizationId', 'name code')
+    .populate(createdByPopulate);
   if (!customer) {
     throw AppError.notFound('Customer not found');
   }
@@ -81,22 +122,72 @@ async function assertAgentExists(agentId: string): Promise<void> {
 }
 
 export async function createCustomer(dto: CreateCustomerDto, req: Request) {
+  if (!req.user) throw AppError.unauthorized();
+  const creatorId = req.user.sub;
   if (dto.assignedAgent) {
     await assertAgentExists(dto.assignedAgent);
   }
 
-  const customerCode = await generateCode('CUST', 'customer_seq');
-  const customer = await Customer.create({ ...dto, customerCode });
+  const organizationId = await resolveOrganizationId(dto, req);
 
+  const customerRole = await Role.findOne({ name: 'Customer' });
+  if (!customerRole) {
+    throw AppError.badRequest('Customer role is not configured — run the seed script');
+  }
+
+  const customerId = await withTransaction(async (session) => {
+    const passwordHash = await hashPassword(dto.password);
+    const [user] = await User.create(
+      [
+        {
+          name: dto.name,
+          email: dto.email,
+          mobile: dto.mobile,
+          passwordHash,
+          role: customerRole.id as string,
+          accountType: 'customer',
+          organizationId,
+        },
+      ],
+      { session },
+    );
+    if (!user) throw new Error('Failed to create linked user account');
+
+    const customer = await createCustomerProfile(session, {
+      name: dto.name,
+      mobile: dto.mobile,
+      email: dto.email,
+      dob: dto.dob,
+      gender: dto.gender,
+      aadhaarNumber: dto.aadhaarNumber,
+      panNumber: dto.panNumber,
+      address: dto.address,
+      occupation: dto.occupation,
+      monthlyIncome: dto.monthlyIncome,
+      nominee: dto.nominee,
+      assignedAgent: dto.assignedAgent,
+      linkedUser: user._id,
+      createdBy: creatorId,
+      organizationId,
+    });
+
+    return customer.id as string;
+  });
+
+  await recordAuditLog({
+    req,
+    action: 'user.created',
+    entityType: 'User',
+    metadata: { email: dto.email, accountType: 'customer' },
+  });
   await recordAuditLog({
     req,
     action: 'customer.created',
     entityType: 'Customer',
-    entityId: customer.id as string,
-    metadata: { customerCode },
+    entityId: customerId,
   });
 
-  return getCustomerById(customer.id as string, req);
+  return getCustomerById(customerId, req);
 }
 
 export async function updateCustomer(id: string, dto: UpdateCustomerDto, req: Request) {
@@ -104,13 +195,25 @@ export async function updateCustomer(id: string, dto: UpdateCustomerDto, req: Re
     await assertAgentExists(dto.assignedAgent);
   }
 
-  const customer = await Customer.findById(id);
+  const customer = await Customer.findOne(applyCustomerScope({ _id: id }, getAccessScope(req)));
   if (!customer) {
     throw AppError.notFound('Customer not found');
   }
 
   Object.assign(customer, dto);
-  await customer.save();
+
+  await withTransaction(async (session) => {
+    await customer.save({ session });
+
+    if (customer.linkedUser && (dto.name || dto.email || dto.mobile || dto.isActive !== undefined)) {
+      const update: Record<string, unknown> = {};
+      if (dto.name !== undefined) update.name = dto.name;
+      if (dto.email !== undefined) update.email = dto.email;
+      if (dto.mobile !== undefined) update.mobile = dto.mobile;
+      if (dto.isActive !== undefined) update.isActive = dto.isActive;
+      await User.findByIdAndUpdate(customer.linkedUser, update, { session });
+    }
+  });
 
   await recordAuditLog({
     req,
@@ -124,12 +227,20 @@ export async function updateCustomer(id: string, dto: UpdateCustomerDto, req: Re
 }
 
 export async function deleteCustomer(id: string, req: Request): Promise<void> {
-  const customer = await Customer.findById(id);
+  const customer = await Customer.findOne(applyCustomerScope({ _id: id }, getAccessScope(req)));
   if (!customer) {
     throw AppError.notFound('Customer not found');
   }
 
-  await customer.softDelete();
+  await withTransaction(async (session) => {
+    customer.isDeleted = true;
+    customer.deletedAt = new Date();
+    await customer.save({ session });
+
+    if (customer.linkedUser) {
+      await User.findByIdAndUpdate(customer.linkedUser, { isActive: false }, { session });
+    }
+  });
 
   await recordAuditLog({
     req,

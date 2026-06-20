@@ -11,12 +11,12 @@ import type {
 } from './agents.dto';
 
 export const listAgents = asyncHandler(async (req: Request, res: Response) => {
-  const result = await agentsService.listAgents(req.query as unknown as ListAgentsQueryDto);
+  const result = await agentsService.listAgents(req.query as unknown as ListAgentsQueryDto, req);
   sendSuccess(res, result, 'Agents retrieved');
 });
 
 export const getAgent = asyncHandler(async (req: Request, res: Response) => {
-  const agent = await agentsService.getAgentById(req.params.id as string);
+  const agent = await agentsService.getAgentById(req.params.id as string, req);
   sendSuccess(res, agent, 'Agent retrieved');
 });
 
@@ -40,7 +40,7 @@ export const deleteAgent = asyncHandler(async (req: Request, res: Response) => {
 });
 
 export const getAgentCustomers = asyncHandler(async (req: Request, res: Response) => {
-  const customers = await agentsService.getAgentCustomers(req.params.id as string);
+  const customers = await agentsService.getAgentCustomers(req.params.id as string, req);
   sendSuccess(res, customers, 'Assigned customers retrieved');
 });
 
@@ -64,6 +64,11 @@ export const unassignCustomers = asyncHandler(async (req: Request, res: Response
 
 export const getAgentPerformance = asyncHandler(async (req: Request, res: Response) => {
   const { from, to } = req.query as unknown as AgentPerformanceQueryDto;
-  const performance = await agentsService.getAgentPerformance(req.params.id as string, from, to);
+  const performance = await agentsService.getAgentPerformance(
+    req.params.id as string,
+    req,
+    from,
+    to,
+  );
   sendSuccess(res, performance, 'Agent performance retrieved');
 });

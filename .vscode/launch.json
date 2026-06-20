@@ -3,7 +3,7 @@
     "configurations": [
         {
             "command": "npm start",
-            "name": "Run npm run dev",
+            "name": "Run Local",
             "request": "launch",
             "type": "node-terminal",
              "cwd": "${workspaceFolder}\\backend"

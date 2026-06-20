@@ -23,26 +23,47 @@
       </mat-form-field>
 
       @if (!userId()) {
-        <mat-form-field appearance="outline" class="sc-form__field">
-          <mat-label>Initial password</mat-label>
-          <input matInput type="password" formControlName="password" />
-          @if (form.controls.password.invalid && form.controls.password.touched) {
-            <mat-error
-              >Min 8 characters with upper/lowercase, a number, and a special character</mat-error
-            >
+        <div class="sc-form__row">
+          <mat-form-field appearance="outline" class="sc-form__field">
+            <mat-label>Password</mat-label>
+            <input matInput type="password" formControlName="password" />
+            @if (form.controls.password.invalid && form.controls.password.touched) {
+              <mat-error
+                >Min 8 characters with upper/lowercase, a number, and a special character</mat-error
+              >
+            }
+          </mat-form-field>
+          <mat-form-field appearance="outline" class="sc-form__field">
+            <mat-label>Confirm password</mat-label>
+            <input matInput type="password" formControlName="confirmPassword" />
+            @if (form.hasError('passwordMismatch') && form.controls.confirmPassword.touched) {
+              <mat-error>Passwords do not match</mat-error>
+            }
+          </mat-form-field>
+        </div>
+      }
+
+      <mat-form-field appearance="outline" class="sc-form__field">
+        <mat-label>Account type</mat-label>
+        <mat-select formControlName="accountType">
+          @for (option of accountTypeOptions; track option.value) {
+            <mat-option [value]="option.value">{{ option.label }}</mat-option>
           }
+        </mat-select>
+      </mat-form-field>
+
+      @if (!userId() && showOrganizationField) {
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Organization</mat-label>
+          <mat-select formControlName="organizationId">
+            @for (organization of organizations(); track organization._id) {
+              <mat-option [value]="organization._id">{{ organization.name }}</mat-option>
+            }
+          </mat-select>
         </mat-form-field>
       }
 
-      <div class="sc-form__row">
-        <mat-form-field appearance="outline" class="sc-form__field">
-          <mat-label>Account type</mat-label>
-          <mat-select formControlName="accountType">
-            <mat-option value="admin">Admin</mat-option>
-            <mat-option value="agent">Collection Agent</mat-option>
-            <mat-option value="customer">Customer</mat-option>
-          </mat-select>
-        </mat-form-field>
+      @if (showRoleField) {
         <mat-form-field appearance="outline" class="sc-form__field">
           <mat-label>Role</mat-label>
           <mat-select formControlName="role">
@@ -51,7 +72,7 @@
             }
           </mat-select>
         </mat-form-field>
-      </div>
+      }
 
       <button
         mat-flat-button

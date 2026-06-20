@@ -10,6 +10,8 @@ export interface AccessTokenPayload {
   accountType: AccountType;
   /** Linked Agent/Customer profile id, when accountType is 'agent' or 'customer'. */
   profileId: string | null;
+  /** Owning Organization id; null only for accountType 'super_admin'. */
+  organizationId: string | null;
 }
 
 export interface RefreshTokenPayload {

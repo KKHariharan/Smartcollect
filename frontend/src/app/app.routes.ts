@@ -90,6 +90,13 @@ export const routes: Routes = [
         loadChildren: () => import('./features/roles/roles.routes').then((m) => m.ROLES_ROUTES),
       },
       {
+        path: 'organizations',
+        loadChildren: () =>
+          import('./features/organizations/organizations.routes').then(
+            (m) => m.ORGANIZATIONS_ROUTES,
+          ),
+      },
+      {
         path: 'settings',
         loadChildren: () =>
           import('./features/settings/settings.routes').then((m) => m.SETTINGS_ROUTES),

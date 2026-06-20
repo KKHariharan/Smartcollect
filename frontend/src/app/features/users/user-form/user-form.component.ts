@@ -9,8 +9,20 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { UsersService } from '../../../core/services/users.service';
 import { RolesService } from '../../../core/services/roles.service';
+import { OrganizationsService } from '../../../core/services/organizations.service';
+import { AuthService } from '../../../core/services/auth.service';
 import { Role } from '../../../core/models/role.model';
+import { Organization } from '../../../core/models/organization.model';
+import { AccountType } from '../../../core/models/user.model';
 import { strongPasswordValidator } from '../../../shared/validators/strong-password.validator';
+import { passwordMatchValidator } from '../../../shared/validators/password-match.validator';
+
+const ACCOUNT_TYPE_OPTIONS: { value: AccountType; label: string }[] = [
+  { value: 'admin', label: 'Admin' },
+  { value: 'agent', label: 'Collection Agent' },
+  { value: 'customer', label: 'Customer' },
+  { value: 'super_admin', label: 'Super Admin' },
+];
 
 @Component({
   selector: 'app-user-form',
@@ -30,6 +42,8 @@ export class UserFormComponent implements OnInit {
   private readonly fb = inject(FormBuilder);
   private readonly usersService = inject(UsersService);
   private readonly rolesService = inject(RolesService);
+  private readonly organizationsService = inject(OrganizationsService);
+  private readonly authService = inject(AuthService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
   private readonly snackBar = inject(MatSnackBar);
@@ -37,38 +51,73 @@ export class UserFormComponent implements OnInit {
   readonly userId = signal<string | null>(null);
   readonly saving = signal(false);
   readonly roles = signal<Role[]>([]);
+  readonly organizations = signal<Organization[]>([]);
+  readonly editingAccountType = signal<AccountType | null>(null);
+  readonly selectedAccountType = signal<AccountType>('admin');
 
-  readonly form = this.fb.nonNullable.group({
-    name: ['', [Validators.required, Validators.minLength(2)]],
-    email: ['', [Validators.required, Validators.email]],
-    mobile: ['', [Validators.required, Validators.pattern(/^[0-9]{10}$/)]],
-    password: ['', [strongPasswordValidator]],
-    role: ['', [Validators.required]],
-    accountType: ['admin' as 'admin' | 'agent' | 'customer'],
-    isActive: [true],
-  });
+  readonly isSuperAdmin = this.authService.currentUser()?.accountType === 'super_admin';
+  readonly accountTypeOptions = ACCOUNT_TYPE_OPTIONS.filter(
+    (option) => option.value !== 'super_admin' || this.isSuperAdmin,
+  );
+
+  readonly form = this.fb.nonNullable.group(
+    {
+      name: ['', [Validators.required, Validators.minLength(2)]],
+      email: ['', [Validators.required, Validators.email]],
+      mobile: ['', [Validators.required, Validators.pattern(/^[0-9]{10}$/)]],
+      password: ['', [strongPasswordValidator]],
+      confirmPassword: [''],
+      accountType: ['admin' as AccountType, [Validators.required]],
+      role: [''],
+      organizationId: [''],
+      isActive: [true],
+    },
+    { validators: [passwordMatchValidator] },
+  );
+
+  get showRoleField(): boolean {
+    const type = this.selectedAccountType();
+    return type === 'admin' || type === 'super_admin';
+  }
+
+  get showOrganizationField(): boolean {
+    return this.isSuperAdmin && this.selectedAccountType() !== 'super_admin';
+  }
 
   ngOnInit(): void {
     this.rolesService.list({ limit: 100 }).subscribe((res) => this.roles.set(res.data.items));
+    if (this.isSuperAdmin) {
+      this.organizationsService
+        .list({ limit: 100 })
+        .subscribe((res) => this.organizations.set(res.data.items));
+    }
+
+    this.form.controls.accountType.valueChanges.subscribe((value) => {
+      this.selectedAccountType.set(value);
+    });
 
     const id = this.route.snapshot.paramMap.get('id');
     if (id) {
       this.userId.set(id);
       this.form.controls.password.clearValidators();
       this.form.controls.password.updateValueAndValidity();
+      this.form.controls.accountType.disable();
       this.usersService.getById(id).subscribe((res) => {
         const user = res.data;
+        this.editingAccountType.set(user.accountType);
+        this.selectedAccountType.set(user.accountType);
         this.form.patchValue({
           name: user.name,
           email: user.email,
           mobile: user.mobile,
-          role: typeof user.role === 'string' ? user.role : user.role._id,
           accountType: user.accountType,
+          role: typeof user.role === 'string' ? user.role : user.role._id,
           isActive: user.isActive,
         });
       });
     } else {
       this.form.controls.password.addValidators(Validators.required);
+      this.form.controls.confirmPassword.addValidators(Validators.required);
     }
   }
 
@@ -87,8 +136,7 @@ export class UserFormComponent implements OnInit {
           name: raw.name,
           email: raw.email,
           mobile: raw.mobile,
-          role: raw.role,
-          accountType: raw.accountType,
+          role: this.showRoleField ? raw.role : undefined,
           isActive: raw.isActive,
         })
       : this.usersService.create({
@@ -96,8 +144,10 @@ export class UserFormComponent implements OnInit {
           email: raw.email,
           mobile: raw.mobile,
           password: raw.password,
-          role: raw.role,
+          confirmPassword: raw.confirmPassword,
           accountType: raw.accountType,
+          role: this.showRoleField ? raw.role : undefined,
+          organizationId: this.showOrganizationField ? raw.organizationId : undefined,
         });
 
     request.subscribe({

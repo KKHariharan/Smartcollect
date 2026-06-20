@@ -33,6 +33,7 @@ function toSafeUser(user: PopulatedUser) {
     email: user.email,
     mobile: user.mobile,
     accountType: user.accountType,
+    organizationId: user.organizationId?.toString() ?? null,
     isActive: user.isActive,
     role: {
       id: user.role.id as string,
@@ -63,6 +64,7 @@ async function buildAccessPayload(user: PopulatedUser): Promise<AccessTokenPaylo
     permissions: user.role.permissions,
     accountType: user.accountType,
     profileId: await resolveProfileId(user),
+    organizationId: user.organizationId?.toString() ?? null,
   };
 }
 
