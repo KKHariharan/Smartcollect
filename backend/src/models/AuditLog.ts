@@ -5,6 +5,7 @@ export interface IAuditLog extends Document {
   action: string;
   entityType: string;
   entityId: Types.ObjectId | null;
+  organizationId: Types.ObjectId | null;
   ipAddress?: string;
   userAgent?: string;
   metadata?: Record<string, unknown>;
@@ -32,6 +33,12 @@ const auditLogSchema = new Schema<IAuditLog>(
     entityId: {
       type: Schema.Types.ObjectId,
       default: null,
+    },
+    organizationId: {
+      type: Schema.Types.ObjectId,
+      ref: 'Organization',
+      default: null,
+      index: true,
     },
     ipAddress: {
       type: String,

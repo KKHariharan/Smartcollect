@@ -26,6 +26,7 @@ export async function recordAuditLog({
       action,
       entityType,
       entityId,
+      organizationId: req.user?.organizationId ?? null,
       ipAddress: req.ip,
       userAgent: req.headers['user-agent'],
       metadata,

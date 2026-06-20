@@ -11,6 +11,18 @@
         <input matInput [value]="currentUser()?.email" disabled />
       </mat-form-field>
 
+      @if (currentUser()?.organization) {
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Organization Name</mat-label>
+          <input matInput [value]="currentUser()?.organization?.name" disabled />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="sc-form__field">
+          <mat-label>Organization Code</mat-label>
+          <input matInput [value]="currentUser()?.organization?.code" disabled />
+        </mat-form-field>
+      }
+
       <mat-form-field appearance="outline" class="sc-form__field">
         <mat-label>Full name</mat-label>
         <input matInput formControlName="name" />

@@ -35,18 +35,20 @@ async function loginAs(email: string, password: string) {
 }
 
 async function createAdminToken() {
+  const organization = await createOrganizationFixture();
   const role = await createRoleFixture({ name: 'Admin', permissions: [PERMISSIONS.WILDCARD] });
   const { user, password } = await createUserFixture({
     email: 'admin@example.com',
     roleId: role.id as string,
     accountType: 'admin',
+    organizationId: organization.id as string,
   });
-  return loginAs(user.email, password);
+  return { token: await loginAs(user.email, password), organization };
 }
 
 describe('Customers CRUD', () => {
   it('creates a customer and its linked login account', async () => {
-    const token = await createAdminToken();
+    const { token } = await createAdminToken();
     await createRoleFixture({ name: 'Customer', permissions: [PERMISSIONS.LOANS_READ] });
 
     const createRes = await request(app)
@@ -76,7 +78,7 @@ describe('Customers CRUD', () => {
   });
 
   it('rejects customer creation when password and confirmPassword do not match', async () => {
-    const token = await createAdminToken();
+    const { token } = await createAdminToken();
     await createRoleFixture({ name: 'Customer' });
 
     const res = await request(app)
@@ -94,7 +96,7 @@ describe('Customers CRUD', () => {
   });
 
   it('rolls back customer creation when the email collides with an existing user', async () => {
-    const token = await createAdminToken();
+    const { token } = await createAdminToken();
     const customerRole = await createRoleFixture({ name: 'Customer' });
     await createUserFixture({
       email: 'taken.customer@example.com',
@@ -119,7 +121,7 @@ describe('Customers CRUD', () => {
   });
 
   it('returns 400 when the Customer role is not seeded', async () => {
-    const token = await createAdminToken();
+    const { token } = await createAdminToken();
 
     const res = await request(app)
       .post(`${env.API_PREFIX}/customers`)
@@ -136,8 +138,8 @@ describe('Customers CRUD', () => {
   });
 
   it('adds a note to a customer', async () => {
-    const token = await createAdminToken();
-    const customer = await createCustomerFixture();
+    const { token, organization } = await createAdminToken();
+    const customer = await createCustomerFixture({ organizationId: organization.id as string });
 
     const res = await request(app)
       .post(`${env.API_PREFIX}/customers/${customer.id}/notes`)
@@ -150,8 +152,8 @@ describe('Customers CRUD', () => {
   });
 
   it('uploads a customer document', async () => {
-    const token = await createAdminToken();
-    const customer = await createCustomerFixture();
+    const { token, organization } = await createAdminToken();
+    const customer = await createCustomerFixture({ organizationId: organization.id as string });
 
     const res = await request(app)
       .post(`${env.API_PREFIX}/customers/${customer.id}/documents/photo`)
@@ -166,8 +168,8 @@ describe('Customers CRUD', () => {
   });
 
   it('rejects a document upload with a disallowed mime type', async () => {
-    const token = await createAdminToken();
-    const customer = await createCustomerFixture();
+    const { token, organization } = await createAdminToken();
+    const customer = await createCustomerFixture({ organizationId: organization.id as string });
 
     const res = await request(app)
       .post(`${env.API_PREFIX}/customers/${customer.id}/documents/photo`)
@@ -256,5 +258,63 @@ describe('Customers row-level scoping', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.items).toHaveLength(1);
     expect(res.body.data.items[0]._id).toBe(ownProfile.id);
+  });
+});
+
+describe('Customers cross-organization isolation', () => {
+  it('returns 403 when an admin reads, updates, or deletes another organization customer', async () => {
+    const { token } = await createAdminToken();
+    const otherCustomer = await createCustomerFixture();
+
+    const getRes = await request(app)
+      .get(`${env.API_PREFIX}/customers/${otherCustomer.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(getRes.status).toBe(403);
+    expect(getRes.body.message).toBe('Access denied');
+
+    const updateRes = await request(app)
+      .patch(`${env.API_PREFIX}/customers/${otherCustomer.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Hijacked' });
+    expect(updateRes.status).toBe(403);
+    expect(updateRes.body.message).toBe('Access denied');
+
+    const deleteRes = await request(app)
+      .delete(`${env.API_PREFIX}/customers/${otherCustomer.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(deleteRes.status).toBe(403);
+    expect(deleteRes.body.message).toBe('Access denied');
+  });
+
+  it('excludes another organization customer from the list', async () => {
+    const { token, organization } = await createAdminToken();
+    await createCustomerFixture({
+      mobile: '9123450099',
+      organizationId: organization.id as string,
+    });
+    const otherCustomer = await createCustomerFixture();
+
+    const res = await request(app)
+      .get(`${env.API_PREFIX}/customers`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    const found = res.body.data.items.find(
+      (item: { _id: string }) => item._id === otherCustomer.id,
+    );
+    expect(found).toBeUndefined();
+  });
+
+  it('rejects assigning an agent from another organization to a customer', async () => {
+    const { token, organization } = await createAdminToken();
+    const customer = await createCustomerFixture({ organizationId: organization.id as string });
+    const otherAgent = await createAgentFixture();
+
+    const res = await request(app)
+      .patch(`${env.API_PREFIX}/customers/${customer.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ assignedAgent: otherAgent.id });
+
+    expect(res.status).toBe(400);
   });
 });

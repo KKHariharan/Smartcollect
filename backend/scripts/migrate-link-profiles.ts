@@ -3,6 +3,10 @@ import { env } from '../src/config/env';
 import { logger } from '../src/config/logger';
 import { Agent } from '../src/models/Agent';
 import { Customer } from '../src/models/Customer';
+import { Loan } from '../src/models/Loan';
+import { Collection } from '../src/models/Collection';
+import { Expense } from '../src/models/Expense';
+import { SupportTicket } from '../src/models/SupportTicket';
 import { Organization } from '../src/models/Organization';
 import { Role } from '../src/models/Role';
 import { User } from '../src/models/User';
@@ -37,6 +41,113 @@ async function backfillOrganizationId(defaultOrgId: string): Promise<void> {
     `Backfilled organizationId on ${userResult.modifiedCount} users, ` +
       `${agentResult.modifiedCount} agents, ${customerResult.modifiedCount} customers`,
   );
+}
+
+/**
+ * Loans/Collections/Expenses/SupportTickets derive their organizationId from the entity that
+ * owns them (customer, loan, or creator) rather than defaulting straight to defaultOrgId — by
+ * the time this runs, backfillOrganizationId() above has already guaranteed every Customer/User
+ * has a non-null organizationId, so these lookups always resolve. Must run in this order:
+ * Loan before Collection, since Collection falls back to its Loan's organizationId.
+ */
+async function backfillDependentOrganizationId(defaultOrgId: string): Promise<void> {
+  const orphanLoans = await Loan.find({ organizationId: null }).select('_id customer');
+  if (orphanLoans.length > 0) {
+    const customerIds = [...new Set(orphanLoans.map((loan) => loan.customer.toString()))];
+    const customers = await Customer.find({ _id: { $in: customerIds } }).select('organizationId');
+    const orgByCustomer = new Map(
+      customers.map((customer) => [customer.id as string, customer.organizationId]),
+    );
+    await Loan.bulkWrite(
+      orphanLoans.map((loan) => ({
+        updateOne: {
+          filter: { _id: loan._id },
+          update: {
+            $set: { organizationId: orgByCustomer.get(loan.customer.toString()) ?? defaultOrgId },
+          },
+        },
+      })),
+    );
+    logger.info(`Backfilled organizationId on ${orphanLoans.length} loans`);
+  }
+
+  const orphanCollections = await Collection.find({ organizationId: null }).select(
+    '_id loan customer',
+  );
+  if (orphanCollections.length > 0) {
+    const loanIds = [...new Set(orphanCollections.map((c) => c.loan.toString()))];
+    const customerIds = [...new Set(orphanCollections.map((c) => c.customer.toString()))];
+    const [loans, customers] = await Promise.all([
+      Loan.find({ _id: { $in: loanIds } }).select('organizationId'),
+      Customer.find({ _id: { $in: customerIds } }).select('organizationId'),
+    ]);
+    const orgByLoan = new Map(loans.map((loan) => [loan.id as string, loan.organizationId]));
+    const orgByCustomer = new Map(
+      customers.map((customer) => [customer.id as string, customer.organizationId]),
+    );
+    await Collection.bulkWrite(
+      orphanCollections.map((collection) => ({
+        updateOne: {
+          filter: { _id: collection._id },
+          update: {
+            $set: {
+              organizationId:
+                orgByLoan.get(collection.loan.toString()) ??
+                orgByCustomer.get(collection.customer.toString()) ??
+                defaultOrgId,
+            },
+          },
+        },
+      })),
+    );
+    logger.info(`Backfilled organizationId on ${orphanCollections.length} collections`);
+  }
+
+  const orphanExpenses = await Expense.find({ organizationId: null }).select('_id createdBy');
+  if (orphanExpenses.length > 0) {
+    const creatorIds = [...new Set(orphanExpenses.map((e) => e.createdBy.toString()))];
+    const creators = await User.find({ _id: { $in: creatorIds } }).select('organizationId');
+    const orgByCreator = new Map(
+      creators.map((creator) => [creator.id as string, creator.organizationId]),
+    );
+    await Expense.bulkWrite(
+      orphanExpenses.map((expense) => ({
+        updateOne: {
+          filter: { _id: expense._id },
+          update: {
+            $set: {
+              organizationId: orgByCreator.get(expense.createdBy.toString()) ?? defaultOrgId,
+            },
+          },
+        },
+      })),
+    );
+    logger.info(`Backfilled organizationId on ${orphanExpenses.length} expenses`);
+  }
+
+  const orphanTickets = await SupportTicket.find({ organizationId: null }).select(
+    '_id customer',
+  );
+  if (orphanTickets.length > 0) {
+    const customerIds = [...new Set(orphanTickets.map((t) => t.customer.toString()))];
+    const customers = await Customer.find({ _id: { $in: customerIds } }).select('organizationId');
+    const orgByCustomer = new Map(
+      customers.map((customer) => [customer.id as string, customer.organizationId]),
+    );
+    await SupportTicket.bulkWrite(
+      orphanTickets.map((ticket) => ({
+        updateOne: {
+          filter: { _id: ticket._id },
+          update: {
+            $set: {
+              organizationId: orgByCustomer.get(ticket.customer.toString()) ?? defaultOrgId,
+            },
+          },
+        },
+      })),
+    );
+    logger.info(`Backfilled organizationId on ${orphanTickets.length} support tickets`);
+  }
 }
 
 async function ensureSuperAdminBootstrapped(): Promise<void> {
@@ -273,6 +384,7 @@ async function run(): Promise<void> {
   await linkOrphanedCustomers(defaultOrg.id as string);
   await fillMissingAgentProfiles(defaultOrg.id as string);
   await fillMissingCustomerProfiles(defaultOrg.id as string);
+  await backfillDependentOrganizationId(defaultOrg.id as string);
 
   await disconnectDB();
   logger.info('migrate-link-profiles complete');

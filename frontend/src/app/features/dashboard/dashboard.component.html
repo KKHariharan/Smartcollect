@@ -1,5 +1,10 @@
 <div class="sc-page-header">
-  <h1>Welcome back, {{ userName }}</h1>
+  <div>
+    <h1>Welcome back, {{ userName }}</h1>
+    @if (organizationName) {
+      <p class="sc-dashboard-subtitle">Welcome to {{ organizationName }}</p>
+    }
+  </div>
 </div>
 
 <div class="sc-dashboard-grid">

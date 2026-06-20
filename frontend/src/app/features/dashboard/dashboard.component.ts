@@ -9,6 +9,8 @@ import { AgentsService } from '../../core/services/agents.service';
 import { LoansService } from '../../core/services/loans.service';
 import { CollectionsService } from '../../core/services/collections.service';
 import { ExpensesService } from '../../core/services/expenses.service';
+import { OrganizationsService } from '../../core/services/organizations.service';
+import { UsersService } from '../../core/services/users.service';
 import { PERMISSIONS } from '../../core/constants/permissions';
 import { ApiResponse, PaginatedResult } from '../../core/models/api.model';
 
@@ -40,12 +42,17 @@ export class DashboardComponent implements OnInit {
   private readonly loansService = inject(LoansService);
   private readonly collectionsService = inject(CollectionsService);
   private readonly expensesService = inject(ExpensesService);
+  private readonly organizationsService = inject(OrganizationsService);
+  private readonly usersService = inject(UsersService);
 
   readonly loading = signal(true);
   readonly cards = signal<DashboardCard[]>([]);
   readonly userName = this.authService.currentUser()?.name ?? '';
+  readonly organizationName = this.authService.currentUser()?.organization?.name ?? null;
 
   ngOnInit(): void {
+    const isSuperAdmin = this.authService.currentUser()?.accountType === 'super_admin';
+
     forkJoin({
       customers: countFrom(this.customersService.list({ limit: 1 })),
       agents: countFrom(this.agentsService.list({ limit: 1 })),
@@ -56,6 +63,12 @@ export class DashboardComponent implements OnInit {
         map((res) => res.data.grandTotal),
         catchError(() => of(0)),
       ),
+      organizations: isSuperAdmin
+        ? countFrom(this.organizationsService.list({ limit: 1 }))
+        : of(0),
+      admins: isSuperAdmin
+        ? countFrom(this.usersService.list({ limit: 1, accountType: 'admin' }))
+        : of(0),
     }).subscribe((result) => {
       this.loading.set(false);
       const allCards: DashboardCard[] = [
@@ -96,6 +109,22 @@ export class DashboardComponent implements OnInit {
           permissions: [PERMISSIONS.EXPENSES_READ],
         },
       ];
+      if (isSuperAdmin) {
+        allCards.push(
+          {
+            label: 'Total Organizations',
+            value: String(result.organizations),
+            icon: 'apartment',
+            permissions: [PERMISSIONS.ORGANIZATIONS_READ],
+          },
+          {
+            label: 'Total Admins',
+            value: String(result.admins),
+            icon: 'admin_panel_settings',
+            permissions: [PERMISSIONS.USERS_READ],
+          },
+        );
+      }
       this.cards.set(
         allCards.filter(
           (card) => !card.permissions || this.authService.hasPermission(...card.permissions),

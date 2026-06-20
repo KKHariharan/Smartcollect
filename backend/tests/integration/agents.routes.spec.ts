@@ -202,3 +202,43 @@ describe('Agents CRUD and assignment', () => {
     });
   });
 });
+
+describe('Agents cross-organization isolation', () => {
+  it('returns 403 when an admin reads, updates, or deletes another organization agent', async () => {
+    const { token } = await createAdminToken();
+    const otherAgent = await createAgentFixture();
+
+    const getRes = await request(app)
+      .get(`${env.API_PREFIX}/agents/${otherAgent.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(getRes.status).toBe(403);
+    expect(getRes.body.message).toBe('Access denied');
+
+    const updateRes = await request(app)
+      .patch(`${env.API_PREFIX}/agents/${otherAgent.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ area: 'Hijacked Zone' });
+    expect(updateRes.status).toBe(403);
+    expect(updateRes.body.message).toBe('Access denied');
+
+    const deleteRes = await request(app)
+      .delete(`${env.API_PREFIX}/agents/${otherAgent.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(deleteRes.status).toBe(403);
+    expect(deleteRes.body.message).toBe('Access denied');
+  });
+
+  it('excludes another organization agent from the list', async () => {
+    const { token, organizationId } = await createAdminToken();
+    await createAgentFixture({ mobile: '9100099999', organizationId });
+    const otherAgent = await createAgentFixture();
+
+    const res = await request(app)
+      .get(`${env.API_PREFIX}/agents`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    const found = res.body.data.items.find((item: { _id: string }) => item._id === otherAgent.id);
+    expect(found).toBeUndefined();
+  });
+});

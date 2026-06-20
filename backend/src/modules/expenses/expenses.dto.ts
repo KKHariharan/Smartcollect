@@ -7,10 +7,11 @@ export const createExpenseSchema = z.object({
   amount: z.coerce.number().positive(),
   date: z.coerce.date().optional(),
   description: z.string().trim().max(500).optional(),
+  organizationId: objectIdSchema.optional(),
 });
 export type CreateExpenseDto = z.infer<typeof createExpenseSchema>;
 
-export const updateExpenseSchema = createExpenseSchema.partial();
+export const updateExpenseSchema = createExpenseSchema.omit({ organizationId: true }).partial();
 export type UpdateExpenseDto = z.infer<typeof updateExpenseSchema>;
 
 export const expenseIdParamSchema = z.object({
@@ -23,11 +24,13 @@ export const listExpensesQuerySchema = z.object({
   category: z.enum(EXPENSE_CATEGORIES).optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
+  organizationId: objectIdSchema.optional(),
 });
 export type ListExpensesQueryDto = z.infer<typeof listExpensesQuerySchema>;
 
 export const expenseSummaryQuerySchema = z.object({
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
+  organizationId: objectIdSchema.optional(),
 });
 export type ExpenseSummaryQueryDto = z.infer<typeof expenseSummaryQuerySchema>;

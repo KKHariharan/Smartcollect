@@ -6,7 +6,7 @@ import { AppError } from '../../utils/app-error';
 import { generateCode } from '../../utils/sequence';
 import { recordAuditLog } from '../../middleware/audit';
 import { getAccessScope } from '../../utils/access-scope';
-import { resolveScopedCustomerFilter } from '../../utils/customer-scope';
+import { assertOrganizationAccess, resolveScopedCustomerFilter } from '../../utils/customer-scope';
 import type {
   AddTicketMessageDto,
   CreateTicketDto,
@@ -15,8 +15,10 @@ import type {
 } from './support.dto';
 
 export async function listTickets(query: ListTicketsQueryDto, req: Request) {
+  const scope = getAccessScope(req);
   const scopedFilter = await resolveScopedCustomerFilter(req);
   const filter: FilterQuery<ISupportTicket> = { ...scopedFilter };
+  if (scope.accountType !== 'super_admin') filter.organizationId = scope.organizationId;
   if (query.status) filter.status = query.status;
   if (query.customer) filter.customer = query.customer;
 
@@ -50,6 +52,7 @@ export async function getTicketById(id: string, req: Request) {
   if (!ticket) {
     throw AppError.notFound('Support ticket not found');
   }
+  assertOrganizationAccess(ticket.organizationId, req);
   return ticket;
 }
 
@@ -58,6 +61,7 @@ export async function createTicket(dto: CreateTicketDto, req: Request) {
   const scope = getAccessScope(req);
 
   let customerId = dto.customer;
+  let organizationId: Types.ObjectId | string | null = scope.organizationId;
   if (scope.accountType === 'customer') {
     if (!scope.profileId) {
       throw AppError.forbidden('No customer profile is linked to this account');
@@ -68,12 +72,15 @@ export async function createTicket(dto: CreateTicketDto, req: Request) {
     if (!customer) {
       throw AppError.badRequest('Customer does not exist');
     }
+    assertOrganizationAccess(customer.organizationId, req);
+    organizationId = customer.organizationId;
   }
 
   const ticketNumber = await generateCode('TKT', 'ticket_seq');
   const ticket = await SupportTicket.create({
     ticketNumber,
     customer: customerId,
+    organizationId,
     raisedBy: req.user.sub,
     subject: dto.subject,
     description: dto.description,
@@ -95,6 +102,7 @@ export async function updateTicketStatus(id: string, dto: UpdateTicketStatusDto,
   if (!ticket) {
     throw AppError.notFound('Support ticket not found');
   }
+  assertOrganizationAccess(ticket.organizationId, req);
 
   ticket.status = dto.status;
   ticket.resolvedAt = dto.status === 'resolved' || dto.status === 'closed' ? new Date() : null;
@@ -119,6 +127,7 @@ export async function addTicketMessage(id: string, dto: AddTicketMessageDto, req
   if (!ticket) {
     throw AppError.notFound('Support ticket not found');
   }
+  assertOrganizationAccess(ticket.organizationId, req);
 
   ticket.messages.push({
     author: Types.ObjectId.createFromHexString(req.user.sub),

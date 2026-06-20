@@ -343,4 +343,62 @@ describe('Users CRUD', () => {
     );
     expect(found).toBeUndefined();
   });
+
+  it('returns 403 when an admin fetches a user from another organization', async () => {
+    const { token } = await createAdminAndLogin();
+    const otherOrganization = await createOrganizationFixture();
+    const otherRole = await createRoleFixture({ name: 'Other Org Admin' });
+    const { user: otherUser } = await createUserFixture({
+      email: 'crossorg-get@example.com',
+      mobile: '9123456792',
+      roleId: otherRole.id as string,
+      organizationId: otherOrganization.id as string,
+    });
+
+    const res = await request(app)
+      .get(`${env.API_PREFIX}/users/${otherUser.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toBe('Access denied');
+  });
+
+  it('returns 403 when an admin updates a user from another organization', async () => {
+    const { token } = await createAdminAndLogin();
+    const otherOrganization = await createOrganizationFixture();
+    const otherRole = await createRoleFixture({ name: 'Other Org Admin 2' });
+    const { user: otherUser } = await createUserFixture({
+      email: 'crossorg-update@example.com',
+      mobile: '9123456793',
+      roleId: otherRole.id as string,
+      organizationId: otherOrganization.id as string,
+    });
+
+    const res = await request(app)
+      .patch(`${env.API_PREFIX}/users/${otherUser.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ name: 'Hijacked Name' });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toBe('Access denied');
+  });
+
+  it('returns 403 when an admin deletes a user from another organization', async () => {
+    const { token } = await createAdminAndLogin();
+    const otherOrganization = await createOrganizationFixture();
+    const otherRole = await createRoleFixture({ name: 'Other Org Admin 3' });
+    const { user: otherUser } = await createUserFixture({
+      email: 'crossorg-delete@example.com',
+      mobile: '9123456794',
+      roleId: otherRole.id as string,
+      organizationId: otherOrganization.id as string,
+    });
+
+    const res = await request(app)
+      .delete(`${env.API_PREFIX}/users/${otherUser.id}`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toBe('Access denied');
+  });
 });

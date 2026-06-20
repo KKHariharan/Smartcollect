@@ -10,6 +10,7 @@ import { hashPassword } from '../../utils/password';
 import { withTransaction } from '../../utils/transaction';
 import { createAgentProfile, createCustomerProfile } from '../../utils/profile-provisioning';
 import { getAccessScope } from '../../utils/access-scope';
+import { assertOrganizationAccess } from '../../utils/customer-scope';
 import { recordAuditLog } from '../../middleware/audit';
 import type { CreateUserDto, ListUsersQueryDto, UpdateUserDto } from './users.dto';
 
@@ -113,20 +114,15 @@ export async function listUsers(query: ListUsersQueryDto, req: Request) {
 }
 
 export async function getUserById(id: string, req?: Request) {
-  const filter: FilterQuery<IUser> = { _id: id };
-  if (req) {
-    const scope = getAccessScope(req);
-    if (scope.accountType !== 'super_admin') {
-      filter.organizationId = scope.organizationId;
-    }
-  }
-
-  const user = await User.findOne(filter)
+  const user = await User.findOne({ _id: id })
     .populate('role', 'name permissions')
     .populate('organizationId', 'name code')
     .populate(createdByPopulate);
   if (!user) {
     throw AppError.notFound('User not found');
+  }
+  if (req) {
+    assertOrganizationAccess(user.organizationId, req);
   }
   return user;
 }
@@ -208,6 +204,7 @@ export async function updateUser(id: string, dto: UpdateUserDto, req: Request) {
   if (!user) {
     throw AppError.notFound('User not found');
   }
+  assertOrganizationAccess(user.organizationId, req);
 
   if (dto.role) {
     if (user.accountType === 'agent' || user.accountType === 'customer') {
@@ -263,6 +260,7 @@ export async function deleteUser(id: string, req: Request): Promise<void> {
   if (!user) {
     throw AppError.notFound('User not found');
   }
+  assertOrganizationAccess(user.organizationId, req);
 
   await withTransaction(async (session) => {
     user.isDeleted = true;

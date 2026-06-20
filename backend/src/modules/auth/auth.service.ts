@@ -2,6 +2,7 @@ import type { Request } from 'express';
 import jwt from 'jsonwebtoken';
 import { User, type IUser } from '../../models/User';
 import type { IRole } from '../../models/Role';
+import type { IOrganization } from '../../models/Organization';
 import { Agent } from '../../models/Agent';
 import { Customer } from '../../models/Customer';
 import { AppError } from '../../utils/app-error';
@@ -24,7 +25,10 @@ interface AuthTokens {
   refreshToken: string;
 }
 
-type PopulatedUser = Omit<IUser, 'role'> & { role: IRole };
+type PopulatedUser = Omit<IUser, 'role' | 'organizationId'> & {
+  role: IRole;
+  organizationId: IOrganization | null;
+};
 
 function toSafeUser(user: PopulatedUser) {
   return {
@@ -33,7 +37,10 @@ function toSafeUser(user: PopulatedUser) {
     email: user.email,
     mobile: user.mobile,
     accountType: user.accountType,
-    organizationId: user.organizationId?.toString() ?? null,
+    organizationId: user.organizationId?.id ? (user.organizationId.id as string) : null,
+    organization: user.organizationId
+      ? { name: user.organizationId.name, code: user.organizationId.code }
+      : null,
     isActive: user.isActive,
     role: {
       id: user.role.id as string,
@@ -64,7 +71,7 @@ async function buildAccessPayload(user: PopulatedUser): Promise<AccessTokenPaylo
     permissions: user.role.permissions,
     accountType: user.accountType,
     profileId: await resolveProfileId(user),
-    organizationId: user.organizationId?.toString() ?? null,
+    organizationId: user.organizationId ? (user.organizationId.id as string) : null,
   };
 }
 
@@ -85,17 +92,20 @@ async function issueTokens(user: PopulatedUser): Promise<AuthTokens> {
 }
 
 async function findActivePopulatedUserById(id: string): Promise<PopulatedUser> {
-  const user = await User.findById(id).populate<{ role: IRole }>('role');
+  const user = await User.findById(id)
+    .populate<{ role: IRole }>('role')
+    .populate('organizationId', 'name code');
   if (!user || !user.isActive) {
     throw AppError.unauthorized('Account is not available');
   }
-  return user;
+  return user as PopulatedUser;
 }
 
 export async function login(email: string, password: string, req: Request) {
   const user = await User.findOne({ email })
     .select('+passwordHash')
-    .populate<{ role: IRole }>('role');
+    .populate<{ role: IRole }>('role')
+    .populate('organizationId', 'name code');
 
   if (!user || !(await comparePassword(password, user.passwordHash))) {
     throw AppError.unauthorized('Invalid email or password');
@@ -130,7 +140,8 @@ export async function refresh(refreshToken: string, req: Request) {
 
   const user = await User.findById(payload.sub)
     .select('+refreshTokenHash +refreshTokenExpiresAt')
-    .populate<{ role: IRole }>('role');
+    .populate<{ role: IRole }>('role')
+    .populate('organizationId', 'name code');
 
   if (!user || !user.isActive) {
     throw AppError.unauthorized('Account is not available');
@@ -238,7 +249,8 @@ export async function resetPassword(
 export async function changePassword(userId: string, dto: ChangePasswordDto, req: Request) {
   const user = await User.findById(userId)
     .select('+passwordHash')
-    .populate<{ role: IRole }>('role');
+    .populate<{ role: IRole }>('role')
+    .populate('organizationId', 'name code');
 
   if (!user || !(await comparePassword(dto.currentPassword, user.passwordHash))) {
     throw AppError.badRequest('Current password is incorrect');
@@ -266,7 +278,9 @@ export async function getProfile(userId: string) {
 }
 
 export async function updateProfile(userId: string, dto: UpdateProfileDto, req: Request) {
-  const user = await User.findById(userId).populate<{ role: IRole }>('role');
+  const user = await User.findById(userId)
+    .populate<{ role: IRole }>('role')
+    .populate('organizationId', 'name code');
   if (!user) {
     throw AppError.notFound('User not found');
   }
@@ -283,5 +297,5 @@ export async function updateProfile(userId: string, dto: UpdateProfileDto, req: 
     actorId: userId,
   });
 
-  return toSafeUser(user);
+  return toSafeUser(user as PopulatedUser);
 }

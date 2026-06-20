@@ -5,6 +5,7 @@ import { connectTestDB, clearTestDB, disconnectTestDB } from '../helpers/db';
 import {
   createAgentFixture,
   createCustomerFixture,
+  createOrganizationFixture,
   createRoleFixture,
   createUserFixture,
 } from '../helpers/factories';
@@ -32,20 +33,29 @@ async function loginAs(email: string, password: string) {
   return res.body.data.accessToken as string;
 }
 
+let adminCounter = 0;
+
 async function createAdminToken() {
-  const role = await createRoleFixture({ name: 'Admin', permissions: [PERMISSIONS.WILDCARD] });
+  const n = ++adminCounter;
+  const organization = await createOrganizationFixture();
+  const role = await createRoleFixture({
+    name: `Admin-${n}`,
+    permissions: [PERMISSIONS.WILDCARD],
+  });
   const { user, password } = await createUserFixture({
-    email: 'admin@example.com',
+    email: `admin${n}@example.com`,
+    mobile: `90000000${String(n).padStart(2, '0')}`,
     roleId: role.id as string,
     accountType: 'admin',
+    organizationId: organization.id as string,
   });
-  return loginAs(user.email, password);
+  return { token: await loginAs(user.email, password), organization };
 }
 
 describe('Loans lifecycle', () => {
   it('creates a pending loan, approves it, and generates an EMI schedule', async () => {
-    const token = await createAdminToken();
-    const customer = await createCustomerFixture();
+    const { token, organization } = await createAdminToken();
+    const customer = await createCustomerFixture({ organizationId: organization.id as string });
 
     const createRes = await request(app)
       .post(`${env.API_PREFIX}/loans`)
@@ -79,8 +89,8 @@ describe('Loans lifecycle', () => {
   });
 
   it('rejects a pending loan with a reason', async () => {
-    const token = await createAdminToken();
-    const customer = await createCustomerFixture();
+    const { token, organization } = await createAdminToken();
+    const customer = await createCustomerFixture({ organizationId: organization.id as string });
 
     const createRes = await request(app)
       .post(`${env.API_PREFIX}/loans`)
@@ -104,8 +114,8 @@ describe('Loans lifecycle', () => {
   });
 
   it('prevents approving a loan twice', async () => {
-    const token = await createAdminToken();
-    const customer = await createCustomerFixture();
+    const { token, organization } = await createAdminToken();
+    const customer = await createCustomerFixture({ organizationId: organization.id as string });
 
     const createRes = await request(app)
       .post(`${env.API_PREFIX}/loans`)
@@ -130,8 +140,8 @@ describe('Loans lifecycle', () => {
   });
 
   it('prevents editing a loan once it is no longer pending', async () => {
-    const token = await createAdminToken();
-    const customer = await createCustomerFixture();
+    const { token, organization } = await createAdminToken();
+    const customer = await createCustomerFixture({ organizationId: organization.id as string });
 
     const createRes = await request(app)
       .post(`${env.API_PREFIX}/loans`)
@@ -159,16 +169,19 @@ describe('Loans lifecycle', () => {
 
 describe('Loans row-level scoping', () => {
   it('lets an agent see only loans for their assigned customers', async () => {
+    const { token: adminToken, organization } = await createAdminToken();
+    const organizationId = organization.id as string;
     const agentRole = await createRoleFixture({
       name: 'Collection Agent',
       permissions: [PERMISSIONS.LOANS_READ, PERMISSIONS.LOANS_CREATE],
     });
-    const agentProfile = await createAgentFixture();
+    const agentProfile = await createAgentFixture({ organizationId });
     const { user: agentUser, password } = await createUserFixture({
       email: 'agent@example.com',
       mobile: '9100000097',
       roleId: agentRole.id as string,
       accountType: 'agent',
+      organizationId,
     });
     agentProfile.linkedUser = agentUser._id;
     await agentProfile.save();
@@ -177,10 +190,14 @@ describe('Loans row-level scoping', () => {
       name: 'Assigned',
       mobile: '9123450020',
       assignedAgent: agentProfile.id as string,
+      organizationId,
     });
-    const otherCustomer = await createCustomerFixture({ name: 'Other', mobile: '9123450021' });
+    const otherCustomer = await createCustomerFixture({
+      name: 'Other',
+      mobile: '9123450021',
+      organizationId,
+    });
 
-    const adminToken = await createAdminToken();
     await request(app)
       .post(`${env.API_PREFIX}/loans`)
       .set('Authorization', `Bearer ${adminToken}`)
@@ -210,5 +227,106 @@ describe('Loans row-level scoping', () => {
     expect(res.status).toBe(200);
     expect(res.body.data.items).toHaveLength(1);
     expect(res.body.data.items[0].customer._id).toBe(assignedCustomer.id);
+  });
+});
+
+describe('Loans cross-organization isolation', () => {
+  it('rejects creating a loan against another organization customer', async () => {
+    const { token } = await createAdminToken();
+    const otherCustomer = await createCustomerFixture();
+
+    const res = await request(app)
+      .post(`${env.API_PREFIX}/loans`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer: otherCustomer.id,
+        principalAmount: 1000,
+        interestRate: 5,
+        totalInstallments: 2,
+        emiType: 'monthly',
+      });
+
+    expect(res.status).toBe(403);
+    expect(res.body.message).toBe('Access denied');
+  });
+
+  it('returns 403 when an admin reads, updates, approves, or closes another organization loan', async () => {
+    const { token: otherToken, organization: otherOrg } = await createAdminToken();
+    const otherCustomer = await createCustomerFixture({
+      organizationId: otherOrg.id as string,
+    });
+    const createRes = await request(app)
+      .post(`${env.API_PREFIX}/loans`)
+      .set('Authorization', `Bearer ${otherToken}`)
+      .send({
+        customer: otherCustomer.id,
+        principalAmount: 1000,
+        interestRate: 5,
+        totalInstallments: 2,
+        emiType: 'monthly',
+      });
+    const otherLoanId = createRes.body.data._id;
+
+    const { token } = await createAdminToken();
+
+    const getRes = await request(app)
+      .get(`${env.API_PREFIX}/loans/${otherLoanId}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(getRes.status).toBe(403);
+    expect(getRes.body.message).toBe('Access denied');
+
+    const updateRes = await request(app)
+      .patch(`${env.API_PREFIX}/loans/${otherLoanId}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ interestRate: 1 });
+    expect(updateRes.status).toBe(403);
+
+    const approveRes = await request(app)
+      .post(`${env.API_PREFIX}/loans/${otherLoanId}/approve`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(approveRes.status).toBe(403);
+  });
+
+  it('excludes another organization loan from the list', async () => {
+    const { token, organization } = await createAdminToken();
+    const customer = await createCustomerFixture({
+      mobile: '9123459001',
+      organizationId: organization.id as string,
+    });
+    await request(app)
+      .post(`${env.API_PREFIX}/loans`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        customer: customer.id,
+        principalAmount: 1000,
+        interestRate: 5,
+        totalInstallments: 2,
+        emiType: 'monthly',
+      });
+
+    const { token: otherToken, organization: otherOrg } = await createAdminToken();
+    const otherCustomer = await createCustomerFixture({
+      mobile: '9123459002',
+      organizationId: otherOrg.id as string,
+    });
+    const otherLoanRes = await request(app)
+      .post(`${env.API_PREFIX}/loans`)
+      .set('Authorization', `Bearer ${otherToken}`)
+      .send({
+        customer: otherCustomer.id,
+        principalAmount: 2000,
+        interestRate: 5,
+        totalInstallments: 2,
+        emiType: 'monthly',
+      });
+    const otherLoanId = otherLoanRes.body.data._id as string;
+
+    const res = await request(app)
+      .get(`${env.API_PREFIX}/loans`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    const found = res.body.data.items.find((item: { _id: string }) => item._id === otherLoanId);
+    expect(found).toBeUndefined();
   });
 });

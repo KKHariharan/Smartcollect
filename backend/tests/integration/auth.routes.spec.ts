@@ -2,9 +2,10 @@ import request from 'supertest';
 import type { Express } from 'express';
 import { createApp } from '../../src/app';
 import { connectTestDB, clearTestDB, disconnectTestDB } from '../helpers/db';
-import { createUserFixture } from '../helpers/factories';
+import { createUserFixture, createOrganizationFixture } from '../helpers/factories';
 import { env } from '../../src/config/env';
 import { User } from '../../src/models/User';
+import { verifyAccessToken } from '../../src/utils/jwt';
 
 let app: Express;
 
@@ -23,7 +24,11 @@ afterAll(async () => {
 
 describe('POST /auth/login', () => {
   it('logs in with valid credentials and returns tokens', async () => {
-    const { user, password } = await createUserFixture({ email: 'login@example.com' });
+    const organization = await createOrganizationFixture({ name: 'Acme Lending' });
+    const { user, password } = await createUserFixture({
+      email: 'login@example.com',
+      organizationId: organization.id as string,
+    });
 
     const res = await request(app)
       .post(`${env.API_PREFIX}/auth/login`)
@@ -35,6 +40,11 @@ describe('POST /auth/login', () => {
     expect(res.body.data.refreshToken).toBeDefined();
     expect(res.body.data.user.email).toBe(user.email);
     expect(res.body.data.user.role.permissions).toBeDefined();
+    expect(res.body.data.user.organizationId).toBe(organization.id as string);
+    expect(res.body.data.user.organization).toEqual({ name: 'Acme Lending', code: organization.code });
+
+    const payload = verifyAccessToken(res.body.data.accessToken);
+    expect(payload.organizationId).toBe(organization.id as string);
   });
 
   it('rejects an invalid password', async () => {
@@ -172,6 +182,9 @@ describe('profile', () => {
       .set('Authorization', `Bearer ${accessToken}`);
     expect(getRes.status).toBe(200);
     expect(getRes.body.data.email).toBe(user.email);
+    expect(getRes.body.data.organization).toEqual(
+      expect.objectContaining({ name: expect.any(String), code: expect.any(String) }),
+    );
 
     const patchRes = await request(app)
       .patch(`${env.API_PREFIX}/auth/profile`)

@@ -13,6 +13,7 @@ export interface AuthUser {
   mobile: string;
   accountType: AccountType;
   organizationId: string | null;
+  organization: { name: string; code: string } | null;
   isActive: boolean;
   role: UserRoleSummary;
   lastLoginAt: string | null;

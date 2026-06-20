@@ -135,6 +135,23 @@ describe('Organizations CRUD and account-type gating', () => {
     const getRes = await request(app)
       .get(`${env.API_PREFIX}/organizations/${otherOrganization.id}`)
       .set('Authorization', `Bearer ${token}`);
-    expect(getRes.status).toBe(404);
+    expect(getRes.status).toBe(403);
+    expect(getRes.body.message).toBe('Access denied');
+  });
+
+  it('rejects an Admin attempting to update or delete any organization (super-admin only routes)', async () => {
+    const organization = await createOrganizationFixture();
+    const { token } = await getAdminToken(organization.id as string);
+
+    const updateRes = await request(app)
+      .patch(`${env.API_PREFIX}/organizations/${organization.id}`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({ status: 'inactive' });
+    expect(updateRes.status).toBe(403);
+
+    const deleteRes = await request(app)
+      .delete(`${env.API_PREFIX}/organizations/${organization.id}`)
+      .set('Authorization', `Bearer ${token}`);
+    expect(deleteRes.status).toBe(403);
   });
 });

@@ -4,6 +4,7 @@ import { Organization, type OrganizationStatus } from '../../src/models/Organiza
 import { Customer } from '../../src/models/Customer';
 import { Agent } from '../../src/models/Agent';
 import { Loan, type EmiType, type LoanStatus } from '../../src/models/Loan';
+import { Collection, type PaymentMode } from '../../src/models/Collection';
 import { PERMISSIONS } from '../../src/constants/permissions';
 import { hashPassword } from '../../src/utils/password';
 import { generateCode } from '../../src/utils/sequence';
@@ -122,9 +123,12 @@ export async function createLoanFixture(
     emiType: EmiType;
     status: LoanStatus;
     createdBy: string;
+    organizationId: string;
   }> = {},
 ) {
   const loanNumber = await generateCode('LN', 'loan_seq');
+  const organizationId =
+    overrides.organizationId ?? ((await createOrganizationFixture()).id as string);
   return Loan.create({
     loanNumber,
     customer: overrides.customer,
@@ -134,5 +138,30 @@ export async function createLoanFixture(
     emiType: overrides.emiType ?? 'monthly',
     status: overrides.status ?? 'pending',
     createdBy: overrides.createdBy,
+    organizationId,
+  });
+}
+
+export async function createCollectionFixture(
+  overrides: Partial<{
+    customer: string;
+    loan: string;
+    collectedBy: string;
+    amount: number;
+    paymentMode: PaymentMode;
+    organizationId: string;
+  }> = {},
+) {
+  const receiptNumber = await generateCode('RCPT', 'collection_seq');
+  const organizationId =
+    overrides.organizationId ?? ((await createOrganizationFixture()).id as string);
+  return Collection.create({
+    receiptNumber,
+    customer: overrides.customer,
+    loan: overrides.loan,
+    collectedBy: overrides.collectedBy,
+    amount: overrides.amount ?? 500,
+    paymentMode: overrides.paymentMode ?? 'cash',
+    organizationId,
   });
 }

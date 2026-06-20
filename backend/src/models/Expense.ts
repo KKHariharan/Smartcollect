@@ -21,6 +21,7 @@ export interface IExpense extends Document, SoftDeleteFields, SoftDeleteMethods 
   date: Date;
   description?: string;
   createdBy: Types.ObjectId;
+  organizationId: Types.ObjectId | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -32,6 +33,7 @@ const expenseSchema = new Schema<IExpense>(
     date: { type: Date, required: true, default: () => new Date(), index: true },
     description: { type: String, trim: true, maxlength: 500 },
     createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
   },
   { timestamps: true },
 );

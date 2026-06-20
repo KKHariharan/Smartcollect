@@ -5,12 +5,15 @@ import * as expensesService from './expenses.service';
 import type { CreateExpenseDto, ListExpensesQueryDto, UpdateExpenseDto } from './expenses.dto';
 
 export const listExpenses = asyncHandler(async (req: Request, res: Response) => {
-  const result = await expensesService.listExpenses(req.query as unknown as ListExpensesQueryDto);
+  const result = await expensesService.listExpenses(
+    req.query as unknown as ListExpensesQueryDto,
+    req,
+  );
   sendSuccess(res, result, 'Expenses retrieved');
 });
 
 export const getExpense = asyncHandler(async (req: Request, res: Response) => {
-  const expense = await expensesService.getExpenseById(req.params.id as string);
+  const expense = await expensesService.getExpenseById(req.params.id as string, req);
   sendSuccess(res, expense, 'Expense retrieved');
 });
 
@@ -34,6 +37,6 @@ export const deleteExpense = asyncHandler(async (req: Request, res: Response) =>
 });
 
 export const getExpenseSummary = asyncHandler(async (req: Request, res: Response) => {
-  const summary = await expensesService.getExpenseSummary(req.query);
+  const summary = await expensesService.getExpenseSummary(req.query, req);
   sendSuccess(res, summary, 'Expense summary retrieved');
 });

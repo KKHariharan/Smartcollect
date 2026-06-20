@@ -11,6 +11,7 @@ import { withTransaction } from '../../utils/transaction';
 import { createCustomerProfile } from '../../utils/profile-provisioning';
 import { recordAuditLog } from '../../middleware/audit';
 import { getAccessScope, type AccessScope } from '../../utils/access-scope';
+import { assertOrganizationAccess } from '../../utils/customer-scope';
 import { storageProvider, type UploadedFile } from '../../providers/storage.provider';
 import type {
   AddCustomerNoteDto,
@@ -48,6 +49,7 @@ async function resolveOrganizationId(dto: { organizationId?: string }, req: Requ
 function applyCustomerScope(
   filter: FilterQuery<ICustomer>,
   scope: AccessScope,
+  options: { includeOrg?: boolean } = {},
 ): FilterQuery<ICustomer> {
   let scoped = filter;
   if (scope.accountType === 'agent') {
@@ -55,7 +57,7 @@ function applyCustomerScope(
   } else if (scope.accountType === 'customer') {
     scoped = { ...scoped, _id: scope.profileId };
   }
-  if (scope.accountType !== 'super_admin') {
+  if (options.includeOrg !== false && scope.accountType !== 'super_admin') {
     scoped = { ...scoped, organizationId: scope.organizationId };
   }
   return scoped;
@@ -103,7 +105,7 @@ export async function listCustomers(query: ListCustomersQueryDto, req: Request) 
 
 export async function getCustomerById(id: string, req: Request) {
   const scope = getAccessScope(req);
-  const filter = applyCustomerScope({ _id: id }, scope);
+  const filter = applyCustomerScope({ _id: id }, scope, { includeOrg: false });
   const customer = await Customer.findOne(filter)
     .populate('assignedAgent', 'name agentCode')
     .populate('organizationId', 'name code')
@@ -111,24 +113,31 @@ export async function getCustomerById(id: string, req: Request) {
   if (!customer) {
     throw AppError.notFound('Customer not found');
   }
+  assertOrganizationAccess(customer.organizationId, req);
   return customer;
 }
 
-async function assertAgentExists(agentId: string): Promise<void> {
+async function assertAgentBelongsToOrganization(
+  agentId: string,
+  organizationId: Types.ObjectId | string | null,
+): Promise<void> {
   const agent = await Agent.findById(agentId);
   if (!agent) {
     throw AppError.badRequest('Assigned agent does not exist');
+  }
+  if (String(agent.organizationId) !== String(organizationId)) {
+    throw AppError.badRequest('Assigned agent does not belong to the selected organization');
   }
 }
 
 export async function createCustomer(dto: CreateCustomerDto, req: Request) {
   if (!req.user) throw AppError.unauthorized();
   const creatorId = req.user.sub;
-  if (dto.assignedAgent) {
-    await assertAgentExists(dto.assignedAgent);
-  }
 
   const organizationId = await resolveOrganizationId(dto, req);
+  if (dto.assignedAgent) {
+    await assertAgentBelongsToOrganization(dto.assignedAgent, organizationId);
+  }
 
   const customerRole = await Role.findOne({ name: 'Customer' });
   if (!customerRole) {
@@ -191,13 +200,16 @@ export async function createCustomer(dto: CreateCustomerDto, req: Request) {
 }
 
 export async function updateCustomer(id: string, dto: UpdateCustomerDto, req: Request) {
-  if (dto.assignedAgent) {
-    await assertAgentExists(dto.assignedAgent);
-  }
-
-  const customer = await Customer.findOne(applyCustomerScope({ _id: id }, getAccessScope(req)));
+  const customer = await Customer.findOne(
+    applyCustomerScope({ _id: id }, getAccessScope(req), { includeOrg: false }),
+  );
   if (!customer) {
     throw AppError.notFound('Customer not found');
+  }
+  assertOrganizationAccess(customer.organizationId, req);
+
+  if (dto.assignedAgent) {
+    await assertAgentBelongsToOrganization(dto.assignedAgent, customer.organizationId);
   }
 
   Object.assign(customer, dto);
@@ -227,10 +239,13 @@ export async function updateCustomer(id: string, dto: UpdateCustomerDto, req: Re
 }
 
 export async function deleteCustomer(id: string, req: Request): Promise<void> {
-  const customer = await Customer.findOne(applyCustomerScope({ _id: id }, getAccessScope(req)));
+  const customer = await Customer.findOne(
+    applyCustomerScope({ _id: id }, getAccessScope(req), { includeOrg: false }),
+  );
   if (!customer) {
     throw AppError.notFound('Customer not found');
   }
+  assertOrganizationAccess(customer.organizationId, req);
 
   await withTransaction(async (session) => {
     customer.isDeleted = true;
@@ -257,6 +272,7 @@ export async function addCustomerNote(id: string, dto: AddCustomerNoteDto, req: 
   if (!customer) {
     throw AppError.notFound('Customer not found');
   }
+  assertOrganizationAccess(customer.organizationId, req);
 
   customer.notes.push({
     author: Types.ObjectId.createFromHexString(req.user.sub),
@@ -285,6 +301,7 @@ export async function uploadCustomerDocument(
   if (!customer) {
     throw AppError.notFound('Customer not found');
   }
+  assertOrganizationAccess(customer.organizationId, req);
 
   const result = await storageProvider.upload(file, `customers/${id}`);
   const documentFile = {

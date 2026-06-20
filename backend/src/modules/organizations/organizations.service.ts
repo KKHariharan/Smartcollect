@@ -5,6 +5,7 @@ import { User } from '../../models/User';
 import { AppError } from '../../utils/app-error';
 import { generateCode } from '../../utils/sequence';
 import { getAccessScope } from '../../utils/access-scope';
+import { assertOrganizationAccess } from '../../utils/customer-scope';
 import { recordAuditLog } from '../../middleware/audit';
 import type {
   CreateOrganizationDto,
@@ -51,11 +52,11 @@ export async function listOrganizations(query: ListOrganizationsQueryDto, req: R
 }
 
 export async function getOrganizationById(id: string, req: Request) {
-  const filter = applyOrganizationScope(req, { _id: id });
-  const organization = await Organization.findOne(filter);
+  const organization = await Organization.findById(id);
   if (!organization) {
     throw AppError.notFound('Organization not found');
   }
+  assertOrganizationAccess(organization._id, req);
   return organization;
 }
 
@@ -86,6 +87,7 @@ export async function updateOrganization(id: string, dto: UpdateOrganizationDto,
   if (!organization) {
     throw AppError.notFound('Organization not found');
   }
+  assertOrganizationAccess(organization._id, req);
 
   if (dto.name !== undefined) organization.name = dto.name;
   if (dto.status !== undefined) organization.status = dto.status;
@@ -107,6 +109,7 @@ export async function deleteOrganization(id: string, req: Request): Promise<void
   if (!organization) {
     throw AppError.notFound('Organization not found');
   }
+  assertOrganizationAccess(organization._id, req);
 
   const assignedUserCount = await User.countDocuments({ organizationId: id });
   if (assignedUserCount > 0) {

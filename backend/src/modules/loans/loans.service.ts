@@ -1,18 +1,30 @@
 import type { Request } from 'express';
-import { Types, type FilterQuery } from 'mongoose';
+import { Types, type FilterQuery, type HydratedDocument } from 'mongoose';
 import { Loan, type ILoan } from '../../models/Loan';
 import { EmiSchedule } from '../../models/EmiSchedule';
 import { Customer } from '../../models/Customer';
 import { AppError } from '../../utils/app-error';
 import { generateCode } from '../../utils/sequence';
 import { recordAuditLog } from '../../middleware/audit';
-import { resolveScopedCustomerFilter } from '../../utils/customer-scope';
+import { getAccessScope } from '../../utils/access-scope';
+import { assertOrganizationAccess, resolveScopedCustomerFilter } from '../../utils/customer-scope';
 import { generateEmiSchedule } from './emi-calculator';
 import type { CreateLoanDto, ListLoansQueryDto, RejectLoanDto, UpdateLoanDto } from './loans.dto';
 
+async function findScopedLoanOrThrow(id: string, req: Request): Promise<HydratedDocument<ILoan>> {
+  const loan = await Loan.findById(id);
+  if (!loan) {
+    throw AppError.notFound('Loan not found');
+  }
+  assertOrganizationAccess(loan.organizationId, req);
+  return loan;
+}
+
 export async function listLoans(query: ListLoansQueryDto, req: Request) {
+  const scope = getAccessScope(req);
   const scopedFilter = await resolveScopedCustomerFilter(req);
   const filter: FilterQuery<ILoan> = { ...scopedFilter };
+  if (scope.accountType !== 'super_admin') filter.organizationId = scope.organizationId;
   if (query.customer) filter.customer = query.customer;
   if (query.status) filter.status = query.status;
 
@@ -46,6 +58,7 @@ export async function getLoanById(id: string, req: Request) {
   if (!loan) {
     throw AppError.notFound('Loan not found');
   }
+  assertOrganizationAccess(loan.organizationId, req);
   return loan;
 }
 
@@ -56,9 +69,15 @@ export async function createLoan(dto: CreateLoanDto, req: Request) {
   if (!customer) {
     throw AppError.badRequest('Customer does not exist');
   }
+  assertOrganizationAccess(customer.organizationId, req);
 
   const loanNumber = await generateCode('LN', 'loan_seq');
-  const loan = await Loan.create({ ...dto, loanNumber, createdBy: req.user.sub });
+  const loan = await Loan.create({
+    ...dto,
+    loanNumber,
+    organizationId: customer.organizationId,
+    createdBy: req.user.sub,
+  });
 
   await recordAuditLog({
     req,
@@ -72,10 +91,7 @@ export async function createLoan(dto: CreateLoanDto, req: Request) {
 }
 
 export async function updateLoan(id: string, dto: UpdateLoanDto, req: Request) {
-  const loan = await Loan.findById(id);
-  if (!loan) {
-    throw AppError.notFound('Loan not found');
-  }
+  const loan = await findScopedLoanOrThrow(id, req);
   if (loan.status !== 'pending') {
     throw AppError.badRequest('Only pending loans can be edited');
   }
@@ -97,10 +113,7 @@ export async function updateLoan(id: string, dto: UpdateLoanDto, req: Request) {
 export async function approveLoan(id: string, req: Request) {
   if (!req.user) throw AppError.unauthorized();
 
-  const loan = await Loan.findById(id);
-  if (!loan) {
-    throw AppError.notFound('Loan not found');
-  }
+  const loan = await findScopedLoanOrThrow(id, req);
   if (loan.status !== 'pending') {
     throw AppError.badRequest('Only pending loans can be approved');
   }
@@ -147,10 +160,7 @@ export async function approveLoan(id: string, req: Request) {
 export async function rejectLoan(id: string, dto: RejectLoanDto, req: Request) {
   if (!req.user) throw AppError.unauthorized();
 
-  const loan = await Loan.findById(id);
-  if (!loan) {
-    throw AppError.notFound('Loan not found');
-  }
+  const loan = await findScopedLoanOrThrow(id, req);
   if (loan.status !== 'pending') {
     throw AppError.badRequest('Only pending loans can be rejected');
   }
@@ -173,10 +183,7 @@ export async function rejectLoan(id: string, dto: RejectLoanDto, req: Request) {
 }
 
 export async function closeLoan(id: string, req: Request) {
-  const loan = await Loan.findById(id);
-  if (!loan) {
-    throw AppError.notFound('Loan not found');
-  }
+  const loan = await findScopedLoanOrThrow(id, req);
   if (loan.status !== 'active') {
     throw AppError.badRequest('Only active loans can be closed');
   }

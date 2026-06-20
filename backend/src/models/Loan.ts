@@ -14,6 +14,7 @@ export type LoanStatus = (typeof LOAN_STATUSES)[number];
 export interface ILoan extends Document, SoftDeleteFields, SoftDeleteMethods {
   loanNumber: string;
   customer: Types.ObjectId;
+  organizationId: Types.ObjectId | null;
   principalAmount: number;
   interestRate: number;
   totalInstallments: number;
@@ -39,6 +40,7 @@ const loanSchema = new Schema<ILoan>(
   {
     loanNumber: { type: String, required: true, unique: true, trim: true },
     customer: { type: Schema.Types.ObjectId, ref: 'Customer', required: true, index: true },
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
     principalAmount: { type: Number, required: true, min: 1 },
     interestRate: { type: Number, required: true, min: 0 },
     totalInstallments: { type: Number, required: true, min: 1 },

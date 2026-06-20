@@ -35,6 +35,9 @@
           <mat-icon>menu</mat-icon>
         </button>
       }
+      @if (currentUser()?.organization) {
+        <span class="sc-topbar__org">{{ currentUser()?.organization?.name }}</span>
+      }
       <span class="sc-topbar__spacer"></span>
       <button mat-button [matMenuTriggerFor]="userMenu" class="sc-user-button">
         <mat-icon>account_circle</mat-icon>

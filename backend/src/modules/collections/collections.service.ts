@@ -7,7 +7,8 @@ import { Customer } from '../../models/Customer';
 import { AppError } from '../../utils/app-error';
 import { generateCode } from '../../utils/sequence';
 import { recordAuditLog } from '../../middleware/audit';
-import { resolveScopedCustomerFilter } from '../../utils/customer-scope';
+import { getAccessScope } from '../../utils/access-scope';
+import { assertOrganizationAccess, resolveScopedCustomerFilter } from '../../utils/customer-scope';
 import { whatsappProvider } from '../../providers/whatsapp.provider';
 import type {
   CreateCollectionDto,
@@ -51,8 +52,10 @@ async function applyPaymentToSchedule(loanId: string, amount: number): Promise<b
 }
 
 export async function listCollections(query: ListCollectionsQueryDto, req: Request) {
+  const scope = getAccessScope(req);
   const scopedFilter = await resolveScopedCustomerFilter(req);
   const filter: FilterQuery<ICollection> = { ...scopedFilter };
+  if (scope.accountType !== 'super_admin') filter.organizationId = scope.organizationId;
   if (query.customer) filter.customer = query.customer;
   if (query.loan) filter.loan = query.loan;
   if (query.from || query.to) {
@@ -93,6 +96,7 @@ export async function getCollectionById(id: string, req: Request) {
   if (!collection) {
     throw AppError.notFound('Collection not found');
   }
+  assertOrganizationAccess(collection.organizationId, req);
   return collection;
 }
 
@@ -111,6 +115,7 @@ export async function createCollection(dto: CreateCollectionDto, req: Request) {
   if (loan.status !== 'active') {
     throw AppError.badRequest('Collections can only be recorded against active loans');
   }
+  assertOrganizationAccess(loan.organizationId, req);
 
   const fullyPaid = await applyPaymentToSchedule(dto.loan, dto.amount);
   if (fullyPaid) {
@@ -123,6 +128,7 @@ export async function createCollection(dto: CreateCollectionDto, req: Request) {
   const collection = await Collection.create({
     ...dto,
     receiptNumber,
+    organizationId: loan.organizationId,
     collectedBy: req.user.sub,
     collectionDate: dto.collectionDate ?? new Date(),
   });
@@ -156,10 +162,11 @@ export interface PendingInstallmentView {
 }
 
 export async function listPendingCollections(query: ListPendingQueryDto, req: Request) {
+  const scope = getAccessScope(req);
   const scopedCustomerFilter = await resolveScopedCustomerFilter(req);
-  const customerFilter = scopedCustomerFilter.customer
-    ? { _id: scopedCustomerFilter.customer }
-    : {};
+  const customerFilter: FilterQuery<{ _id: unknown; organizationId?: unknown }> = {};
+  if (scopedCustomerFilter.customer) customerFilter._id = scopedCustomerFilter.customer;
+  if (scope.accountType !== 'super_admin') customerFilter.organizationId = scope.organizationId;
   const loanCustomerIds = await Customer.find(customerFilter).distinct('_id');
 
   const now = new Date();

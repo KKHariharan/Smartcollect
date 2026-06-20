@@ -12,6 +12,7 @@ import { hashPassword } from '../../utils/password';
 import { withTransaction } from '../../utils/transaction';
 import { createAgentProfile } from '../../utils/profile-provisioning';
 import { getAccessScope } from '../../utils/access-scope';
+import { assertOrganizationAccess } from '../../utils/customer-scope';
 import { recordAuditLog } from '../../middleware/audit';
 import type {
   AssignCustomersDto,
@@ -99,22 +100,14 @@ export async function listAgents(query: ListAgentsQueryDto, req: Request) {
   };
 }
 
-function buildAgentScopeFilter(id: string, req: Request): FilterQuery<IAgent> {
-  const scope = getAccessScope(req);
-  const filter: FilterQuery<IAgent> = { _id: id };
-  if (scope.accountType !== 'super_admin') {
-    filter.organizationId = scope.organizationId;
-  }
-  return filter;
-}
-
 export async function getAgentById(id: string, req: Request) {
-  const agent = await Agent.findOne(buildAgentScopeFilter(id, req))
+  const agent = await Agent.findOne({ _id: id })
     .populate(createdByPopulate)
     .populate('organizationId', 'name code');
   if (!agent) {
     throw AppError.notFound('Agent not found');
   }
+  assertOrganizationAccess(agent.organizationId, req);
   return agent;
 }
 
@@ -178,10 +171,11 @@ export async function createAgent(dto: CreateAgentDto, req: Request) {
 }
 
 export async function updateAgent(id: string, dto: UpdateAgentDto, req: Request) {
-  const agent = await Agent.findOne(buildAgentScopeFilter(id, req));
+  const agent = await Agent.findOne({ _id: id });
   if (!agent) {
     throw AppError.notFound('Agent not found');
   }
+  assertOrganizationAccess(agent.organizationId, req);
 
   Object.assign(agent, dto);
 
@@ -210,10 +204,11 @@ export async function updateAgent(id: string, dto: UpdateAgentDto, req: Request)
 }
 
 export async function deleteAgent(id: string, req: Request): Promise<void> {
-  const agent = await Agent.findOne(buildAgentScopeFilter(id, req));
+  const agent = await Agent.findOne({ _id: id });
   if (!agent) {
     throw AppError.notFound('Agent not found');
   }
+  assertOrganizationAccess(agent.organizationId, req);
 
   const assignedCount = await Customer.countDocuments({ assignedAgent: id });
   if (assignedCount > 0) {
@@ -240,7 +235,8 @@ export async function deleteAgent(id: string, req: Request): Promise<void> {
 
 export async function getAgentCustomers(id: string, req: Request) {
   await getAgentById(id, req);
-  return Customer.find({ assignedAgent: id }).sort({ createdAt: -1 });
+  const organizationId = (await Agent.findById(id).select('organizationId'))?.organizationId;
+  return Customer.find({ assignedAgent: id, organizationId }).sort({ createdAt: -1 });
 }
 
 export async function assignCustomers(id: string, dto: AssignCustomersDto, req: Request) {
@@ -285,8 +281,9 @@ export async function unassignCustomers(id: string, dto: AssignCustomersDto, req
 
 export async function getAgentPerformance(id: string, req: Request, from?: Date, to?: Date) {
   await getAgentById(id, req);
+  const organizationId = (await Agent.findById(id).select('organizationId'))?.organizationId;
 
-  const customerIds = await Customer.find({ assignedAgent: id }).distinct('_id');
+  const customerIds = await Customer.find({ assignedAgent: id, organizationId }).distinct('_id');
   const assignedCustomers = customerIds.length;
   const [activeLoans, closedLoans] = await Promise.all([
     Loan.countDocuments({ customer: { $in: customerIds }, status: 'active' }),

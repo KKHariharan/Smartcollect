@@ -13,6 +13,7 @@ export interface ISupportTicket extends Document {
   ticketNumber: string;
   customer: Types.ObjectId;
   raisedBy: Types.ObjectId;
+  organizationId: Types.ObjectId | null;
   subject: string;
   description: string;
   status: TicketStatus;
@@ -36,6 +37,7 @@ const supportTicketSchema = new Schema<ISupportTicket>(
     ticketNumber: { type: String, required: true, unique: true, trim: true },
     customer: { type: Schema.Types.ObjectId, ref: 'Customer', required: true, index: true },
     raisedBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    organizationId: { type: Schema.Types.ObjectId, ref: 'Organization', default: null, index: true },
     subject: { type: String, required: true, trim: true, maxlength: 200 },
     description: { type: String, required: true, trim: true, maxlength: 2000 },
     status: { type: String, enum: TICKET_STATUSES, default: 'open', index: true },
