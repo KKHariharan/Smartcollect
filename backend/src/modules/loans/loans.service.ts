@@ -14,7 +14,7 @@ import type { CreateLoanDto, ListLoansQueryDto, RejectLoanDto, UpdateLoanDto } f
 async function findScopedLoanOrThrow(id: string, req: Request): Promise<HydratedDocument<ILoan>> {
   const loan = await Loan.findById(id);
   if (!loan) {
-    throw AppError.notFound('Loan not found'); 
+    throw AppError.notFound('Loan not found');
   }
   assertOrganizationAccess(loan.organizationId, req);
   return loan;
